@@ -392,7 +392,7 @@
     if (page === "track" || page === "siparis-takip" || path.indexOf("track") >= 0 || path.indexOf("siparis-takip") >= 0) {
       return "track";
     }
-    return "payment";
+    return readToken() ? "payment" : "track";
   }
 
   function setRoute(name) {
@@ -401,6 +401,15 @@
     $("#payment-nav").classList.toggle("active", name === "payment");
     $("#track-nav").classList.toggle("active", name === "track");
     document.body.setAttribute("data-route", name);
+  }
+
+  function configurePaymentNavigation() {
+    var token = readToken();
+    var paymentNav = $("#payment-nav");
+    paymentNav.hidden = !token;
+    if (token) {
+      paymentNav.setAttribute("href", "?token=" + encodeURIComponent(token));
+    }
   }
 
   function renderPaymentState(title, message, label) {
@@ -701,6 +710,7 @@
   function boot() {
     var route = routeName();
     bindEvents();
+    configurePaymentNavigation();
     setRoute(route);
     renderTrackEmpty("E-posta ve açıklama kodu girildiğinde sipariş durumu burada görünür.", "Bekleniyor", "warning");
 

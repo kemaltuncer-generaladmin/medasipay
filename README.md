@@ -12,7 +12,7 @@ Sanal POS veya kart ödeme akışları bu projeye dahil değildir.
 
 - Ödeme: Qlinik veya Praticase tokenı ile açılır; IBAN, açıklama kodu, tutar ve dekont yükleme gösterir.
 - Sipariş takip: kullanıcı e-posta ve açıklama kodu ile sipariş durumunu kontrol eder.
-- Token yoksa: ödeme oturumu bulunamadı ekranı görünür.
+- Token yoksa: doğrudan sipariş takip ekranı görünür; ödeme sekmesi yalnız tokenlı bağlantıda açılır.
 
 ## Yerel çalışma
 
