@@ -98,6 +98,8 @@ checkout oturumlarına yapılır (`QLINIK_PAYMENT_WEBHOOK_URL` ve
 `PRATICASE_PAYMENT_WEBHOOK_URL`). Admin onayı ve hak tanımı için dekont
 yüklenmiş olmalıdır; servis dekontu boyut sınırı yanında PDF/PNG/JPEG dosya
 imzasından da doğrular ve süresi dolmuş ödeme oturumuna yükleme kabul etmez.
+Admin onayı onaylayan kullanıcıyı, zamanı ve hak tanımı denemelerini kaydeder;
+yeniden hak tanımı denemeleri paket süresini ilk onay anına sabit tutar.
 
 ## Üretim sınırı
 

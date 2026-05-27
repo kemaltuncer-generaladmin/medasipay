@@ -185,6 +185,8 @@ async function routeAdmin(request, response, method, pathname, url) {
         ...order,
         status: "rejected",
         rejectionReason: reason,
+        rejectedBy: stringValue(body.adminActor) || "admin",
+        rejectedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
     });
@@ -357,7 +359,14 @@ function adminOrder(order) {
     webhookUrl: order.webhookUrl,
     metadata: order.metadata,
     rejectionReason: order.rejectionReason || "",
+    rejectedBy: order.rejectedBy || "",
+    rejectedAt: order.rejectedAt || "",
+    approvedBy: order.approvedBy || "",
+    approvedAt: order.approvedAt || "",
+    approvalNote: order.approvalNote || "",
     lastWebhookError: order.lastWebhookError || "",
+    lastWebhookAttemptAt: order.lastWebhookAttemptAt || "",
+    lastWebhookAttemptedBy: order.lastWebhookAttemptedBy || "",
     webhookGrantedAt: order.webhookGrantedAt || "",
     receipt: order.receipt
       ? {
@@ -396,10 +405,17 @@ async function approveOrder(orderId, body) {
     if (!order.receipt) throw httpError(409, "Dekont yüklenmeden sipariş onaylanamaz.");
     if (order.status === "rejected") throw httpError(409, "Reddedilmiş sipariş onaylanamaz.");
     if (order.status === "entitled") return order;
+    if (order.status === "approved") {
+      throw httpError(409, "Onaylanmış sipariş için hak tanımını yeniden dene.");
+    }
+    const approvedAt = new Date().toISOString();
     return {
       ...order,
       status: "approved",
-      updatedAt: new Date().toISOString(),
+      approvedAt,
+      approvedBy: stringValue(body.adminActor) || "admin",
+      approvalNote: stringValue(body.adminNote).slice(0, 500),
+      updatedAt: approvedAt,
     };
   });
   if (approved.status === "entitled") return approved;
@@ -420,6 +436,8 @@ async function grantEntitlement(orderId, body) {
       ...item,
       status: "approved",
       lastWebhookError: "webhook_url_missing",
+      lastWebhookAttemptAt: new Date().toISOString(),
+      lastWebhookAttemptedBy: stringValue(body.adminActor) || item.approvedBy || "admin",
       updatedAt: new Date().toISOString(),
     }));
   }
@@ -428,6 +446,7 @@ async function grantEntitlement(orderId, body) {
     process.env.WEBHOOK_SIGNING_SECRET;
   if (!secret) throw httpError(503, "Webhook imza anahtarı yapılandırılmamış.");
 
+  const approvedAt = order.approvedAt || new Date().toISOString();
   const payload = {
     action: "payment_entitlement_webhook",
     event: "payment.entitlement_granted",
@@ -437,7 +456,7 @@ async function grantEntitlement(orderId, body) {
     reference: order.reference,
     accountId: order.accountId,
     customerEmail: order.customerEmail,
-    approvedAt: new Date().toISOString(),
+    approvedAt,
     adminNote: stringValue(body.adminNote),
     items: order.items,
     metadata: order.metadata,
@@ -458,6 +477,8 @@ async function grantEntitlement(orderId, body) {
       ...item,
       status: "approved",
       lastWebhookError: `webhook_${response.status}:${text.slice(0, 300)}`,
+      lastWebhookAttemptAt: new Date().toISOString(),
+      lastWebhookAttemptedBy: stringValue(body.adminActor) || item.approvedBy || "admin",
       updatedAt: new Date().toISOString(),
     }));
   }
@@ -467,6 +488,8 @@ async function grantEntitlement(orderId, body) {
     status: "entitled",
     lastWebhookError: "",
     webhookGrantedAt: new Date().toISOString(),
+    lastWebhookAttemptAt: new Date().toISOString(),
+    lastWebhookAttemptedBy: stringValue(body.adminActor) || item.approvedBy || "admin",
     updatedAt: new Date().toISOString(),
   }));
 }
