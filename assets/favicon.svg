@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MedAsi">
+  <rect width="64" height="64" rx="14" fill="#0f766e"/>
+  <path d="M17 42V22h7l8 11 8-11h7v20h-6V31l-7 10h-4l-7-10v11h-6z" fill="#fff"/>
+</svg>

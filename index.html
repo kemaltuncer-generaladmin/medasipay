@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="description" content="MedAsi ödeme ve sipariş takip ekranı.">
+    <title>MedAsi Ödeme</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="assets/styles.css?v=checkout-4">
+    <script src="assets/app.js?v=checkout-4" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">İçeriğe geç</a>
+
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="MedAsi Ödeme">
+        <img src="assets/favicon.svg" alt="">
+        <span>MedAsi Ödeme</span>
+      </a>
+      <nav class="nav" aria-label="Ana menü">
+        <a href="./" id="payment-nav">Ödeme</a>
+        <a href="?page=track" id="track-nav">Sipariş takip</a>
+      </nav>
+      <span class="pill">Qlinik / Praticase</span>
+    </header>
+
+    <main id="main" class="shell checkout-shell">
+      <section id="payment-route" class="route">
+        <section id="locked-screen" class="panel state-panel" hidden>
+          <span class="label">Ödeme oturumu</span>
+          <h1>Geçerli ödeme tokenı bulunamadı</h1>
+          <p class="muted">
+            Bu sayfa doğrudan açılmaz. Qlinik veya Praticase içinde ödeme talebi
+            oluşturulduktan sonra uygulama tek kullanımlık ödeme tokenı üretir ve
+            sizi buraya yönlendirir.
+          </p>
+        </section>
+
+        <section id="checkout-screen" hidden>
+          <div class="page-title">
+            <div>
+              <span class="label" id="session-product-label">Ödeme</span>
+              <h1 id="session-title">Ödeme</h1>
+            </div>
+            <span class="pill" id="session-reference">-</span>
+          </div>
+
+          <div class="two-column">
+            <section class="panel">
+              <div class="section-title">
+                <h2>Ödeme özeti</h2>
+                <span class="status warning" id="session-status">Ödeme bekleniyor</span>
+              </div>
+
+              <div class="session-meta">
+                <div>
+                  <span>Uygulama</span>
+                  <strong id="session-product-name">-</strong>
+                </div>
+                <div>
+                  <span>Kanal</span>
+                  <strong id="session-channel">-</strong>
+                </div>
+                <div>
+                  <span>Geçerlilik</span>
+                  <strong id="session-expires">-</strong>
+                </div>
+              </div>
+
+              <div class="summary-list" id="session-items"></div>
+              <div class="total">
+                <span>Toplam</span>
+                <strong id="session-total">-</strong>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="section-title">
+                <h2>Banka transferi</h2>
+              </div>
+
+              <dl class="info-list">
+                <div>
+                  <dt>Alıcı</dt>
+                  <dd id="bank-holder">MedAsi Teknoloji A.Ş.</dd>
+                </div>
+                <div>
+                  <dt>IBAN</dt>
+                  <dd>
+                    <button type="button" class="copy" id="bank-iban" data-copy="TR11 0006 2000 0000 0123 4567 89">
+                      TR11 0006 2000 0000 0123 4567 89
+                    </button>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Açıklama kodu</dt>
+                  <dd>
+                    <button type="button" class="copy" id="payment-reference" data-copy="-">-</button>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Tutar</dt>
+                  <dd id="bank-total">-</dd>
+                </div>
+              </dl>
+
+              <form id="receipt-form" class="receipt-form">
+                <label for="receipt-file">Dekont</label>
+                <div class="file-row">
+                  <input id="receipt-file" name="receipt" type="file" accept=".pdf,.png,.jpg,.jpeg">
+                  <button type="submit" class="button primary" id="receipt-submit">Dekontu gönder</button>
+                </div>
+                <label class="check confirm-check">
+                  <input id="payment-confirm" type="checkbox">
+                  <span>Transferi yaptım, tutar ve açıklama kodunu kontrol ettim.</span>
+                </label>
+                <p id="receipt-meta" class="muted">Dosya seçilmedi.</p>
+              </form>
+            </section>
+          </div>
+
+          <section class="panel status-panel">
+            <div class="section-title">
+              <h2>Sipariş akışı</h2>
+            </div>
+            <ol class="timeline" id="session-timeline"></ol>
+          </section>
+        </section>
+      </section>
+
+      <section id="track-route" class="route">
+        <div class="page-title">
+          <div>
+            <span class="label">Sipariş takip</span>
+            <h1>Sipariş durumunu kontrol et</h1>
+          </div>
+        </div>
+
+        <div class="two-column narrow-right">
+          <section class="panel">
+            <div class="section-title">
+              <h2>Takip bilgileri</h2>
+            </div>
+
+            <form id="track-form" class="track-form">
+              <label class="field" for="track-email">
+                <span>E-posta</span>
+                <input id="track-email" name="email" type="email" autocomplete="email" required>
+              </label>
+              <label class="field" for="track-reference">
+                <span>Açıklama kodu</span>
+                <input id="track-reference" name="reference" type="text" autocomplete="off" required>
+              </label>
+              <button type="submit" class="button primary">Durumu kontrol et</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <h2>Sonuç</h2>
+              <span class="status warning" id="track-status">Bekleniyor</span>
+            </div>
+
+            <div id="track-empty" class="empty-state">E-posta ve açıklama kodu girildiğinde sipariş durumu burada görünür.</div>
+            <div id="track-result" hidden>
+              <dl class="info-list">
+                <div>
+                  <dt>Uygulama</dt>
+                  <dd id="track-product">-</dd>
+                </div>
+                <div>
+                  <dt>Kod</dt>
+                  <dd>
+                    <button type="button" class="copy" id="track-reference-copy" data-copy="-">-</button>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Tutar</dt>
+                  <dd id="track-total">-</dd>
+                </div>
+              </dl>
+              <ol class="timeline track-timeline" id="track-timeline"></ol>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
