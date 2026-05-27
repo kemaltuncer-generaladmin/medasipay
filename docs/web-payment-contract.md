@@ -12,21 +12,37 @@ istemciden alınmaz.
 
 ```json
 {
-  "channel": "web",
+  "channel": "android",
   "product": "qlinik",
-  "accountId": "clinic_123",
-  "customerName": "Özel Klinik",
-  "returnUrl": "https://qlinik.medasi.com.tr/account/billing",
+  "accountId": "user_123",
+  "customerEmail": "ogrenci@qlinik.com",
+  "customerName": "Qlinik Kullanıcısı",
+  "returnUrl": "https://qlinik.medasi.com.tr/",
+  "webhookUrl": "https://qlinik.medasi.com.tr/functions/v1/qlinik",
   "items": [
     {
-      "sku": "doctor_monthly",
-      "name": "Doktor paketi",
+      "sku": "coin_50",
+      "name": "50 MedAsi Coin",
       "quantity": 1,
-      "unitPrice": 1490,
-      "entitlementType": "license",
-      "entitlementQuantity": 1
+      "unitPrice": 40,
+      "priceCents": 4000,
+      "currency": "TRY",
+      "entitlementType": "coin",
+      "entitlementQuantity": 50,
+      "metadata": {
+        "code": "coin_50",
+        "coin_amount": 50,
+        "question_amount": 0
+      }
     }
-  ]
+  ],
+  "metadata": {
+    "source": "qlinik",
+    "product": {
+      "code": "coin_50",
+      "name": "50 MedAsi Coin"
+    }
+  }
 }
 ```
 
@@ -35,8 +51,10 @@ Yanıt:
 ```json
 {
   "checkoutUrl": "https://odeme.medasi.com.tr/?token=pay_qln_8f3k2",
+  "trackingUrl": "https://odeme.medasi.com.tr/?page=track",
   "token": "pay_qln_8f3k2",
   "reference": "QLN-8F3K2",
+  "orderId": "ord_1001",
   "expiresAt": "2026-05-27T15:30:00+03:00"
 }
 ```
@@ -52,11 +70,11 @@ render eder:
 ```json
 {
   "orderId": "ord_1001",
-  "channel": "web",
-  "product": "Qlinik",
-  "accountId": "clinic_123",
-  "customerEmail": "muhasebe@klinik.com",
-  "customerName": "Özel Klinik",
+  "channel": "android",
+  "product": "qlinik",
+  "accountId": "user_123",
+  "customerEmail": "ogrenci@qlinik.com",
+  "customerName": "Qlinik Kullanıcısı",
   "reference": "QLN-8F3K2",
   "expiresAt": "2026-05-27T17:00:00+03:00",
   "bankAccount": {
@@ -65,14 +83,18 @@ render eder:
   },
   "items": [
     {
-      "sku": "doctor_monthly",
-      "name": "Doktor paketi",
+      "sku": "coin_50",
+      "name": "50 MedAsi Coin",
       "quantity": 1,
-      "unitPrice": 1490,
-      "entitlementType": "license",
-      "entitlementQuantity": 1
+      "unitPrice": 40,
+      "priceCents": 4000,
+      "currency": "TRY",
+      "entitlementType": "coin",
+      "entitlementQuantity": 50
     }
   ],
+  "totalAmount": 40,
+  "currency": "TRY",
   "status": "payment_pending"
 }
 ```
@@ -121,26 +143,44 @@ Content-Type: application/json
 Yanıt ödeme oturumundaki sipariş gövdesi ile aynı formatı kullanır ve `status`
 alanını içerir.
 
+## Admin review
+
+Admin panel siparişleri, paket bilgisini ve dekontu admin API üzerinden alır.
+Her istek `X-MedAsi-Admin-Key` veya `Authorization: Bearer <key>` ile
+korunmalıdır.
+
+```http
+GET /api/admin/orders
+GET /api/admin/orders/ord_1001
+GET /api/admin/orders/ord_1001/receipt
+```
+
+`GET /api/admin/orders/:id/receipt` dekontu `inline` olarak döndürür; panel bu
+yanıtı dosya önizleme veya indirme için kullanabilir.
+
 ## Entitlement webhook
 
 Onay sonrası ödeme servisi ilgili ürüne imzalı webhook gönderir.
 
 ```json
 {
+  "action": "payment_entitlement_webhook",
   "event": "payment.entitlement_granted",
-  "channel": "web",
+  "channel": "android",
   "product": "qlinik",
   "orderId": "ord_1001",
   "reference": "QLN-8F3K2",
-  "accountId": "clinic_123",
+  "accountId": "user_123",
+  "customerEmail": "ogrenci@qlinik.com",
+  "approvedAt": "2026-05-27T15:05:00+03:00",
   "items": [
     {
-      "sku": "doctor_monthly",
-      "entitlementType": "license",
-      "entitlementQuantity": 1
+      "sku": "coin_50",
+      "entitlementType": "coin",
+      "entitlementQuantity": 50
     }
   ]
 }
 ```
 
-Webhook doğrulaması için `X-MedAsi-Signature` zorunlu olmalıdır.
+Webhook doğrulaması için `X-MedAsi-Signature: sha256=<hex>` zorunludur.

@@ -3,9 +3,10 @@
 
   var LOCAL_HOSTNAMES = ["", "localhost", "127.0.0.1", "::1"];
   var IS_LOCAL_PREVIEW = LOCAL_HOSTNAMES.indexOf(window.location.hostname) >= 0;
+  var IS_FILE_PREVIEW = window.location.protocol === "file:";
   var configuredApiBase = window.MEDASI_PAYMENT_API_BASE;
   var API_BASE = configuredApiBase === undefined
-    ? (IS_LOCAL_PREVIEW ? "" : window.location.origin)
+    ? (IS_FILE_PREVIEW ? "" : window.location.origin)
     : String(configuredApiBase).replace(/\/+$/, "");
   var ALLOW_URL_SESSION = window.MEDASI_ALLOW_URL_SESSION === true || IS_LOCAL_PREVIEW;
   var DEFAULT_BANK_ACCOUNT = {
@@ -20,6 +21,7 @@
   });
 
   var channelLabels = {
+    android: "Android",
     web: "Web"
   };
 
@@ -121,6 +123,9 @@
 
   function normalizeChannel(value) {
     var channel = String(value || "").toLowerCase();
+    if (channel === "mobile" || channel === "mobil") {
+      return "android";
+    }
     return channelLabels[channel] ? channel : "web";
   }
 
@@ -325,7 +330,13 @@
     }
 
     if (API_BASE) {
-      return fetchSession(token);
+      return fetchSession(token).catch(function (error) {
+        var demoSession = IS_LOCAL_PREVIEW ? inferDemoSession(token) : null;
+        if (demoSession) {
+          return demoSession;
+        }
+        throw error;
+      });
     }
 
     return Promise.resolve(IS_LOCAL_PREVIEW ? inferDemoSession(token) : null);
