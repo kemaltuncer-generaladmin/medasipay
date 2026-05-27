@@ -27,33 +27,55 @@
 
   var statusMeta = {
     payment_pending: { label: "Ödeme bekleniyor", tone: "warning" },
-    receipt_uploaded: { label: "Dekont yüklendi", tone: "success" },
+    receipt_uploaded: { label: "Dekont yüklendi", tone: "info" },
     review: { label: "Kontrol ediliyor", tone: "warning" },
     approved: { label: "Onaylandı", tone: "success" },
     entitled: { label: "Hak tanımlandı", tone: "success" },
-    rejected: { label: "Reddedildi", tone: "danger" }
+    rejected: { label: "Reddedildi", tone: "danger" },
+    expired: { label: "Süresi dolmuş", tone: "danger" }
   };
 
+  var resumeMeta = {
+    payment_pending: {
+      title: "Bu sipariş için ödeme henüz tamamlanmadı.",
+      subtitle: "Banka bilgilerini gör, transferi yap ve dekontu yükle.",
+      button: "Ödemeye devam et"
+    },
+    receipt_uploaded: {
+      title: "Dekontu yükledin, kontrol bekleniyor.",
+      subtitle: "Gerekirse yeni bir dekont yükleyebilir veya bilgileri tekrar görüntüleyebilirsin.",
+      button: "Ödeme ekranını aç"
+    },
+    review: {
+      title: "Sipariş ekibimizin kontrolünde.",
+      subtitle: "Onay sürerken bilgileri görüntüleyebilirsin.",
+      button: "Sipariş ekranını aç"
+    }
+  };
+
+  var demoExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   var demoSessions = {
     pay_qlinik_demo: {
+      token: "pay_qlinik_demo",
       channel: "web",
       product: "Qlinik",
       reference: "QLN-8F3K2",
       accountName: "Qlinik web kullanıcısı",
       customerEmail: "demo@qlinik.com",
-      expiresAt: "2026-05-27T15:30:00+03:00",
+      expiresAt: demoExpiresAt,
       items: [
         { name: "Doktor paketi", quantity: 1, unit: "1 kullanıcı", unitPrice: 1490 },
         { name: "SMS kontörü", quantity: 1, unit: "1000 SMS", unitPrice: 690 }
       ]
     },
     pay_praticase_demo: {
+      token: "pay_praticase_demo",
       channel: "web",
       product: "Praticase",
       reference: "PRC-92A7X",
       accountName: "Praticase web kullanıcısı",
       customerEmail: "demo@praticase.com",
-      expiresAt: "2026-05-27T16:00:00+03:00",
+      expiresAt: demoExpiresAt,
       items: [
         { name: "Ofis lisansı", quantity: 1, unit: "1 ofis", unitPrice: 1890 },
         { name: "Ek kullanıcı", quantity: 2, unit: "1 kullanıcı", unitPrice: 490 }
@@ -62,7 +84,7 @@
   };
 
   var demoTrackOrders = [
-    Object.assign({}, demoSessions.pay_qlinik_demo, { status: "review" }),
+    Object.assign({}, demoSessions.pay_qlinik_demo, { status: "payment_pending" }),
     Object.assign({}, demoSessions.pay_praticase_demo, { status: "approved" })
   ];
 
@@ -149,6 +171,26 @@
       dateStyle: "medium",
       timeStyle: "short"
     }).format(date);
+  }
+
+  function formatRelativeExpiry(value) {
+    if (!value) return "";
+    var target = new Date(value).getTime();
+    if (!Number.isFinite(target)) return "";
+    var diff = target - Date.now();
+    if (diff <= 0) return "Süre doldu";
+    var minutes = Math.round(diff / 60000);
+    if (minutes < 60) return minutes + " dk içinde sona erer";
+    var hours = Math.round(minutes / 60);
+    if (hours < 24) return hours + " sa içinde sona erer";
+    var days = Math.round(hours / 24);
+    return days + " gün içinde sona erer";
+  }
+
+  function isExpiredSession(session) {
+    if (!session || !session.expiresAt) return false;
+    var ts = new Date(session.expiresAt).getTime();
+    return Number.isFinite(ts) && ts <= Date.now();
   }
 
   function normalizeReference(value) {
@@ -381,7 +423,12 @@
 
   function resolveOrderStatus(email, reference) {
     if (API_BASE) {
-      return fetchOrderStatus(email, reference);
+      return fetchOrderStatus(email, reference).catch(function (error) {
+        if (IS_LOCAL_PREVIEW) {
+          return findDemoOrder(email, reference);
+        }
+        throw error;
+      });
     }
     return Promise.resolve(IS_LOCAL_PREVIEW ? findDemoOrder(email, reference) : null);
   }
@@ -423,16 +470,16 @@
   function renderLocked() {
     renderPaymentState(
       "Geçerli ödeme tokenı bulunamadı",
-      "Bu sayfa doğrudan açılmaz. Qlinik veya Praticase içinde ödeme talebi oluşturulduktan sonra uygulama tek kullanımlık ödeme tokenı üretir ve sizi buraya yönlendirir.",
+      "Bu sayfa doğrudan açılmaz. Qlinik veya Praticase uygulamasında ödeme talebi oluşturulduktan sonra size özel tek kullanımlık bir bağlantı üretilir ve buraya yönlendirilirsiniz.",
       "Ödeme oturumu"
     );
   }
 
   function renderLoading() {
     renderPaymentState(
-      "Token doğrulanıyor",
-      "Ödeme bilgileri uygulamadan gelen token ile hazırlanıyor.",
-      "Ödeme oturumu"
+      "Ödeme bilgileri hazırlanıyor",
+      "Sipariş bilgileriniz uygulamadan gelen güvenli token ile doğrulanıyor.",
+      "Bir saniye"
     );
   }
 
@@ -463,30 +510,69 @@
     return order.indexOf(status) >= order.indexOf(step);
   }
 
-  function paymentTimelineMarkup(session, receiptFileName) {
-    var receiptDone = statusReached(session.status, "receipt_uploaded");
-    var reviewDone = statusReached(session.status, "approved") || session.status === "rejected";
-    var entitlementDone = statusReached(session.status, "entitled");
-    var receiptMeta = receiptFileName || (receiptDone ? "Dekont ödeme servisine ulaştı" : "IBAN transferinden sonra");
-    var reviewTitle = session.status === "rejected" ? "Ödeme reddedildi" : "Ödeme kontrolü";
-    var reviewMeta = session.status === "rejected" ? "Dekont veya ödeme bilgileri eşleşmedi" : "Dekont kontrolünden sonra onaylanır";
+  function statusIs(status, step) {
+    return status === step;
+  }
 
-    return (
-      '<li class="event-row done"><span class="dot"></span><div><div class="row-title">Ödeme talebi oluşturuldu</div><div class="row-meta">' +
-      escapeHtml(session.product) + " " + escapeHtml(formatChannel(session.channel)) + ' uygulamasında</div></div></li>' +
-      '<li class="event-row done"><span class="dot"></span><div><div class="row-title">Açıklama kodu üretildi</div><div class="row-meta">' +
-      escapeHtml(session.reference) + '</div></div></li>' +
-      '<li class="event-row ' + (receiptDone ? "done" : "") + '"><span class="dot"></span><div><div class="row-title">' +
-      (receiptDone ? "Dekont yüklendi" : "Dekont bekleniyor") + '</div><div class="row-meta">' +
-      escapeHtml(receiptMeta) + '</div></div></li>' +
-      '<li class="event-row ' + (reviewDone ? "done" : "") + '"><span class="dot"></span><div><div class="row-title">' +
-      reviewTitle + '</div><div class="row-meta">' + reviewMeta + '</div></div></li>' +
-      '<li class="event-row ' + (entitlementDone ? "done" : "") + '"><span class="dot"></span><div><div class="row-title">Hak tanımı</div><div class="row-meta">Onay sonrası ilgili hesaba işlenir</div></div></li>'
-    );
+  function timelineRow(state, title, meta) {
+    return '<li class="event-row ' + state + '"><span class="dot"></span><div><div class="row-title">' +
+      title + '</div><div class="row-meta">' + meta + '</div></div></li>';
+  }
+
+  function paymentTimelineMarkup(session, receiptFileName) {
+    var status = session.status;
+    var rejected = status === "rejected";
+    var receiptDone = statusReached(status, "receipt_uploaded");
+    var reviewDone = statusReached(status, "approved");
+    var entitlementDone = statusReached(status, "entitled");
+
+    var rows = [];
+    rows.push(timelineRow("done",
+      "Ödeme talebi oluşturuldu",
+      escapeHtml(session.product) + " " + escapeHtml(formatChannel(session.channel)) + " uygulamasında"));
+
+    rows.push(timelineRow("done",
+      "Açıklama kodu üretildi",
+      escapeHtml(session.reference)));
+
+    var receiptState = receiptDone ? "done" : (statusIs(status, "payment_pending") ? "current" : "");
+    var receiptMeta = receiptFileName
+      ? escapeHtml(receiptFileName)
+      : (receiptDone ? "Dekont ödeme servisine ulaştı" : "IBAN'a transfer sonrası dekont yükleyin");
+    rows.push(timelineRow(receiptState,
+      receiptDone ? "Dekont yüklendi" : "Dekont bekleniyor",
+      receiptMeta));
+
+    var reviewState = reviewDone ? "done" : (rejected ? "danger" : (receiptDone ? "current" : ""));
+    var reviewTitle = rejected ? "Ödeme reddedildi" : (reviewDone ? "Ödeme onaylandı" : "Ödeme kontrolü");
+    var reviewMeta = rejected
+      ? "Dekont veya ödeme bilgileri eşleşmedi"
+      : (reviewDone ? "Tutar ve açıklama kodu doğrulandı" : "Ekibimiz dekontu kontrol ediyor");
+    rows.push(timelineRow(reviewState, reviewTitle, reviewMeta));
+
+    var entitlementState = entitlementDone ? "done" : (reviewDone ? "current" : "");
+    rows.push(timelineRow(entitlementState,
+      "Hak tanımı",
+      entitlementDone ? "İlgili hesaba işlendi" : "Onay sonrası ilgili hesaba işlenir"));
+
+    return rows.join("");
   }
 
   function renderTimeline(session, receiptFileName) {
     $("#session-timeline").innerHTML = paymentTimelineMarkup(session, receiptFileName);
+  }
+
+  function renderExpiryPill(session) {
+    var pill = $("#expiry-pill");
+    var text = $("#expiry-text");
+    if (!pill || !text) return;
+    var label = formatRelativeExpiry(session.expiresAt);
+    if (!label || isExpiredSession(session)) {
+      pill.hidden = true;
+      return;
+    }
+    text.textContent = label;
+    pill.hidden = false;
   }
 
   function renderSession(session) {
@@ -521,7 +607,45 @@
       );
     }).join("") : '<p class="empty-state">Ödeme kalemi bekleniyor.</p>';
 
+    renderExpiryPill(session);
     renderTimeline(session);
+    updatePaymentUiForStatus(session);
+  }
+
+  function updatePaymentUiForStatus(session) {
+    var form = $("#receipt-form");
+    var help = $("#payment-help");
+    var canUpload = ["payment_pending", "receipt_uploaded"].indexOf(session.status) >= 0
+      && !isExpiredSession(session);
+
+    if (form) {
+      form.querySelectorAll("input,button").forEach(function (el) {
+        el.disabled = !canUpload;
+      });
+    }
+
+    if (!help) return;
+    if (isExpiredSession(session)) {
+      help.className = "callout";
+      help.querySelector("strong").textContent = "Ödeme oturumunun süresi dolmuş.";
+      help.querySelector("span").textContent = "Lütfen ödemeyi başlattığınız uygulamadan yeni bir bağlantı oluşturun.";
+    } else if (session.status === "approved" || session.status === "entitled") {
+      help.className = "callout success";
+      help.querySelector("strong").textContent = "Ödemeniz onaylandı.";
+      help.querySelector("span").textContent = "İlgili hesabınıza hak tanımı işlenmiştir; ek bir işlem yapmanıza gerek yoktur.";
+    } else if (session.status === "rejected") {
+      help.className = "callout";
+      help.querySelector("strong").textContent = "Ödeme reddedildi.";
+      help.querySelector("span").textContent = "Dekont veya ödeme bilgileri eşleşmedi. Lütfen destek ile iletişime geçin.";
+    } else if (session.status === "receipt_uploaded") {
+      help.className = "callout info";
+      help.querySelector("strong").textContent = "Dekontunuz alındı, kontrol bekleniyor.";
+      help.querySelector("span").textContent = "Tutar ve açıklama kodu doğrulandıktan sonra siparişiniz onaylanacaktır.";
+    } else {
+      help.className = "callout info";
+      help.querySelector("strong").textContent = "Tutarı tam olarak ve TL hesabına yatırın.";
+      help.querySelector("span").textContent = "Eksik tutar veya açıklama kodu olmadan yapılan transferler manuel inceleme nedeniyle gecikebilir.";
+    }
   }
 
   function renderTrackEmpty(message, statusText, tone) {
@@ -533,6 +657,32 @@
     $("#track-result").hidden = true;
   }
 
+  function configureResume(order) {
+    var card = $("#track-resume");
+    if (!card) return;
+
+    var canResume = ["payment_pending", "receipt_uploaded", "review"].indexOf(order.status) >= 0
+      && order.token
+      && !isExpiredSession(order);
+
+    if (!canResume) {
+      card.hidden = true;
+      return;
+    }
+
+    var meta = resumeMeta[order.status] || resumeMeta.payment_pending;
+    $("#track-resume-title").textContent = meta.title;
+    $("#track-resume-subtitle").textContent = meta.subtitle;
+
+    var button = $("#track-resume-button");
+    var svg = button.querySelector("svg");
+    button.innerHTML = "";
+    if (svg) button.appendChild(svg);
+    button.appendChild(document.createTextNode(" " + meta.button));
+    button.setAttribute("href", "?token=" + encodeURIComponent(order.token));
+    card.hidden = false;
+  }
+
   function renderTrackOrder(order) {
     $("#track-empty").hidden = true;
     $("#track-result").hidden = false;
@@ -541,6 +691,15 @@
     $("#track-reference-copy").textContent = order.reference;
     $("#track-reference-copy").setAttribute("data-copy", order.reference);
     $("#track-total").textContent = formatMoney(order.totalAmount);
+    var expiresNode = $("#track-expires");
+    if (expiresNode) {
+      var expiryText = order.expiresAt ? formatDate(order.expiresAt) : "-";
+      if (order.expiresAt && isExpiredSession(order)) {
+        expiryText += " (süresi dolmuş)";
+      }
+      expiresNode.textContent = expiryText;
+    }
+    configureResume(order);
     $("#track-timeline").innerHTML = paymentTimelineMarkup(order);
   }
 
@@ -594,6 +753,9 @@
         return;
       }
       var value = copy.getAttribute("data-copy") || copy.textContent.trim();
+      if (!value || value === "-") {
+        return;
+      }
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(value).catch(function () {});
       }
@@ -602,16 +764,21 @@
   }
 
   function bindReceiptForm() {
-    $("#receipt-file").addEventListener("change", function (event) {
+    var fileInput = $("#receipt-file");
+    var meta = $("#receipt-meta");
+
+    fileInput.addEventListener("change", function (event) {
       var file = event.target.files[0];
-      $("#receipt-meta").textContent = file
-        ? file.name + " " + formatFileSize(file.size)
-        : "Dosya seçilmedi.";
+      if (!file) {
+        meta.textContent = "Dosya seçilmedi. PDF, PNG veya JPG kabul edilir (en fazla 10 MB).";
+        return;
+      }
+      meta.textContent = file.name + " — " + formatFileSize(file.size);
     });
 
     $("#receipt-form").addEventListener("submit", function (event) {
       event.preventDefault();
-      var file = $("#receipt-file").files[0];
+      var file = fileInput.files[0];
       var confirmed = $("#payment-confirm").checked;
       var submit = $("#receipt-submit");
 
@@ -629,18 +796,20 @@
       }
 
       submit.disabled = true;
-      submit.textContent = "Gönderiliyor";
+      var originalHTML = submit.innerHTML;
+      submit.textContent = "Gönderiliyor...";
 
       uploadReceipt(file).then(function () {
         currentSession.status = "receipt_uploaded";
         applyStatus("#session-status", currentSession.status, "Dekont yüklendi");
         renderTimeline(currentSession, file.name);
-        toast("Dekont gönderildi.");
+        updatePaymentUiForStatus(currentSession);
+        toast("Dekont gönderildi. Ekibimiz kontrol edecektir.");
       }).catch(function () {
-        toast("Dekont gönderilemedi.");
+        toast("Dekont gönderilemedi. Lütfen tekrar deneyin.");
       }).finally(function () {
         submit.disabled = false;
-        submit.textContent = "Dekontu gönder";
+        submit.innerHTML = originalHTML;
       });
     });
   }
@@ -660,7 +829,8 @@
       }
 
       submit.disabled = true;
-      submit.textContent = "Kontrol ediliyor";
+      var originalHTML = submit.innerHTML;
+      submit.textContent = "Kontrol ediliyor...";
       renderTrackEmpty("Sipariş durumu kontrol ediliyor.", "Kontrol ediliyor", "warning");
 
       resolveOrderStatus(email, reference).then(function (order) {
@@ -670,10 +840,10 @@
         }
         renderTrackOrder(order);
       }).catch(function () {
-        renderTrackEmpty("Sipariş durumu şu anda kontrol edilemedi.", "Hata", "danger");
+        renderTrackEmpty("Sipariş durumu şu anda kontrol edilemedi. Lütfen biraz sonra tekrar deneyin.", "Hata", "danger");
       }).finally(function () {
         submit.disabled = false;
-        submit.textContent = "Durumu kontrol et";
+        submit.innerHTML = originalHTML;
       });
     });
   }
@@ -701,7 +871,7 @@
     }).catch(function () {
       renderPaymentState(
         "Ödeme tokenı doğrulanamadı",
-        "Token süresi dolmuş veya ödeme oturumu artık kullanılamıyor olabilir. Lütfen ödemeyi başlattığınız uygulamaya geri dönün.",
+        "Tokenın süresi dolmuş veya ödeme oturumu artık kullanılamıyor olabilir. Lütfen ödemeyi başlattığınız uygulamaya geri dönün.",
         "Ödeme oturumu"
       );
     });
@@ -712,7 +882,7 @@
     bindEvents();
     configurePaymentNavigation();
     setRoute(route);
-    renderTrackEmpty("E-posta ve açıklama kodu girildiğinde sipariş durumu burada görünür.", "Bekleniyor", "warning");
+    renderTrackEmpty("E-posta adresinizi ve açıklama kodunu girdiğinizde sipariş durumu burada görünür.", "Bekleniyor", "warning");
 
     if (route === "payment") {
       bootPayment();

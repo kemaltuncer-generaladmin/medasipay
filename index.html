@@ -3,53 +3,107 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#ffffff">
-    <meta name="description" content="MedAsi ödeme ve sipariş takip ekranı.">
-    <title>MedAsi Ödeme</title>
+    <meta name="theme-color" content="#0f766e">
+    <meta name="description" content="MedAsi Ödeme — Qlinik ve Praticase siparişleri için güvenli banka transferi ve sipariş takip ekranı.">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <title>MedAsi Ödeme — Güvenli sipariş ekranı</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="assets/styles.css?v=checkout-4">
-    <script src="assets/app.js?v=checkout-4" defer></script>
+    <link rel="stylesheet" href="assets/styles.css?v=checkout-5">
+    <script src="assets/app.js?v=checkout-5" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">İçeriğe geç</a>
 
     <header class="topbar">
       <a class="brand" href="/" aria-label="MedAsi Ödeme">
-        <img src="assets/favicon.svg" alt="">
-        <span>MedAsi Ödeme</span>
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <span class="brand-text">
+          <strong>MedAsi Ödeme</strong>
+          <small>Güvenli Banka Transferi</small>
+        </span>
       </a>
       <nav class="nav" aria-label="Ana menü">
-        <a href="./" id="payment-nav">Ödeme</a>
-        <a href="?page=track" id="track-nav">Sipariş takip</a>
+        <a href="./" id="payment-nav">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          Ödeme
+        </a>
+        <a href="?page=track" id="track-nav">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          Sipariş takip
+        </a>
       </nav>
-      <span class="pill">Qlinik / Praticase</span>
+      <div class="topbar-side">
+        <span class="pill" title="SSL şifreli güvenli oturum">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          SSL Güvenli
+        </span>
+      </div>
     </header>
 
     <main id="main" class="shell checkout-shell">
       <section id="payment-route" class="route">
         <section id="locked-screen" class="panel state-panel" hidden>
+          <span class="state-illustration" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
           <span class="label">Ödeme oturumu</span>
           <h1>Geçerli ödeme tokenı bulunamadı</h1>
           <p class="muted">
-            Bu sayfa doğrudan açılmaz. Qlinik veya Praticase içinde ödeme talebi
-            oluşturulduktan sonra uygulama tek kullanımlık ödeme tokenı üretir ve
-            sizi buraya yönlendirir.
+            Bu sayfa doğrudan açılmaz. Qlinik veya Praticase uygulamasında ödeme talebi
+            oluşturulduktan sonra size özel tek kullanımlık bir bağlantı üretilir ve
+            buraya yönlendirilirsiniz.
           </p>
+          <a class="button primary" href="?page=track">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            Mevcut bir siparişi sorgula
+          </a>
         </section>
 
         <section id="checkout-screen" hidden>
+          <div class="trust-bar" aria-label="Güvenlik göstergeleri">
+            <span class="pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6Z"/></svg>
+              Doğrulanmış işletme
+            </span>
+            <span class="pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Şifreli ödeme oturumu
+            </span>
+            <span class="pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7M9 7V5a3 3 0 0 1 6 0v2"/></svg>
+              Banka EFT/Havale
+            </span>
+            <span class="pill" id="expiry-pill" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              <span id="expiry-text">-</span>
+            </span>
+          </div>
+
           <div class="page-title">
             <div>
               <span class="label" id="session-product-label">Ödeme</span>
               <h1 id="session-title">Ödeme</h1>
+              <p id="session-subtitle" class="muted">Aşağıdaki banka hesabına tutarı yatırın ve dekontunuzu sisteme yükleyin.</p>
             </div>
             <span class="pill" id="session-reference">-</span>
           </div>
 
+          <div class="trust-card" role="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6Z"/><path d="m9 12 2 2 4-4"/></svg>
+            <div>
+              <strong>Ödemeniz MedAsi Teknoloji A.Ş. tarafından alınır.</strong>
+              <span>Kart bilgisi istemiyoruz. Bu sayfada yalnız banka transferi ile ödeme yapılır; dekontunuz yüklendikten sonra ekibimiz manuel doğrulama yapar.</span>
+            </div>
+          </div>
+
           <div class="two-column">
-            <section class="panel">
+            <section class="panel emphasis">
               <div class="section-title">
-                <h2>Ödeme özeti</h2>
+                <div class="section-head">
+                  <span class="label">Sipariş özeti</span>
+                  <h2>Ödeme tutarı ve kalemler</h2>
+                </div>
                 <span class="status warning" id="session-status">Ödeme bekleniyor</span>
               </div>
 
@@ -70,14 +124,25 @@
 
               <div class="summary-list" id="session-items"></div>
               <div class="total">
-                <span>Toplam</span>
+                <span>Toplam ödenecek</span>
                 <strong id="session-total">-</strong>
+              </div>
+
+              <div class="callout info" id="payment-help">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                <div>
+                  <strong>Tutarı tam olarak ve TL hesabına yatırın.</strong>
+                  <span>Eksik tutar veya açıklama kodu olmadan yapılan transferler manuel inceleme nedeniyle gecikebilir.</span>
+                </div>
               </div>
             </section>
 
             <section class="panel">
               <div class="section-title">
-                <h2>Banka transferi</h2>
+                <div class="section-head">
+                  <span class="label">Banka transferi</span>
+                  <h2>Hesap bilgileri</h2>
+                </div>
               </div>
 
               <dl class="info-list">
@@ -88,7 +153,7 @@
                 <div>
                   <dt>IBAN</dt>
                   <dd>
-                    <button type="button" class="copy" id="bank-iban" data-copy="TR11 0006 2000 0000 0123 4567 89">
+                    <button type="button" class="copy" id="bank-iban" data-copy="TR11 0006 2000 0000 0123 4567 89" title="IBAN'ı kopyala">
                       TR11 0006 2000 0000 0123 4567 89
                     </button>
                   </dd>
@@ -96,7 +161,7 @@
                 <div>
                   <dt>Açıklama kodu</dt>
                   <dd>
-                    <button type="button" class="copy" id="payment-reference" data-copy="-">-</button>
+                    <button type="button" class="copy" id="payment-reference" data-copy="-" title="Açıklama kodunu kopyala">-</button>
                   </dd>
                 </div>
                 <div>
@@ -105,26 +170,57 @@
                 </div>
               </dl>
 
-              <form id="receipt-form" class="receipt-form">
-                <label for="receipt-file">Dekont</label>
+              <p class="helper">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                Transfer açıklamasına yukarıdaki kodu eksiksiz yazın; doğrulama bu kod üzerinden yapılır.
+              </p>
+
+              <form id="receipt-form" class="receipt-form" novalidate>
+                <label for="receipt-file">Dekont yükle</label>
                 <div class="file-row">
                   <input id="receipt-file" name="receipt" type="file" accept=".pdf,.png,.jpg,.jpeg">
-                  <button type="submit" class="button primary" id="receipt-submit">Dekontu gönder</button>
+                  <button type="submit" class="button primary" id="receipt-submit">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>
+                    Dekontu gönder
+                  </button>
                 </div>
+                <p class="muted helper-text" id="receipt-meta">Dosya seçilmedi. PDF, PNG veya JPG kabul edilir (en fazla 10 MB).</p>
                 <label class="check confirm-check">
                   <input id="payment-confirm" type="checkbox">
-                  <span>Transferi yaptım, tutar ve açıklama kodunu kontrol ettim.</span>
+                  <span>Belirtilen IBAN'a tam tutarı yatırdım ve açıklama kodunu transfere ekledim.</span>
                 </label>
-                <p id="receipt-meta" class="muted">Dosya seçilmedi.</p>
               </form>
             </section>
           </div>
 
           <section class="panel status-panel">
             <div class="section-title">
-              <h2>Sipariş akışı</h2>
+              <div class="section-head">
+                <span class="label">Sipariş akışı</span>
+                <h2>Adımlar ve durum</h2>
+              </div>
             </div>
             <ol class="timeline" id="session-timeline"></ol>
+          </section>
+
+          <section class="faq" aria-label="Sıkça sorulan sorular">
+            <h2>Sıkça sorulan sorular</h2>
+            <details>
+              <summary>Kart bilgilerimi neden istemiyorsunuz?</summary>
+              <p>Bu sayfa sanal POS değildir. Ödemeniz yalnız banka EFT/havale ile alınır; dolayısıyla kart numarası, CVV veya OTP istenmez. Kart bilgilerinizi MedAsi'ye veya bu sayfaya asla girmeyin.</p>
+            </details>
+            <details>
+              <summary>Açıklama kodunu yazmazsam ne olur?</summary>
+              <p>Açıklama kodu, yaptığınız transferin hangi siparişe ait olduğunu eşleştirmek için kullanılır. Kodu yazmazsanız ödemeniz manuel inceleme nedeniyle gecikebilir. Bu durumda dekontu yine yükleyin; ekip eşleştirmeyi yapacaktır.</p>
+            </details>
+            <details>
+              <summary>Dekontumu yükledikten sonra ne olacak?</summary>
+              <p>Dekontunuz güvenli olarak ekibimize iletilir; tutar ve açıklama kodu kontrol edilir. Onaydan sonra Qlinik ya da Praticase hesabınıza hak tanımı otomatik olarak işlenir.</p>
+            </details>
+            <details>
+              <summary>Ödememi yarıda bıraktım, daha sonra devam edebilir miyim?</summary>
+              <p>Evet. <a href="?page=track">Sipariş takip</a> ekranına e-postanız ve açıklama kodunuzla giriş yapın; yarıda kalmış sipariş için tekrar ödeme/dekont yükleme bağlantısı görüntülenir.</p>
+            </details>
           </section>
         </section>
       </section>
@@ -134,35 +230,21 @@
           <div>
             <span class="label">Sipariş takip</span>
             <h1>Sipariş durumunu kontrol et</h1>
+            <p>Daha önce başlattığınız bir ödeme varsa e-posta adresinizi ve açıklama kodunuzu kullanarak durumu sorgulayabilir, yarıda kalan ödemeye buradan devam edebilirsiniz.</p>
           </div>
         </div>
 
         <div class="two-column narrow-right">
-          <section class="panel">
+          <section class="panel emphasis">
             <div class="section-title">
-              <h2>Takip bilgileri</h2>
-            </div>
-
-            <form id="track-form" class="track-form">
-              <label class="field" for="track-email">
-                <span>E-posta</span>
-                <input id="track-email" name="email" type="email" autocomplete="email" required>
-              </label>
-              <label class="field" for="track-reference">
-                <span>Açıklama kodu</span>
-                <input id="track-reference" name="reference" type="text" autocomplete="off" required>
-              </label>
-              <button type="submit" class="button primary">Durumu kontrol et</button>
-            </form>
-          </section>
-
-          <section class="panel">
-            <div class="section-title">
-              <h2>Sonuç</h2>
+              <div class="section-head">
+                <span class="label">Sonuç</span>
+                <h2>Sipariş bilgileri</h2>
+              </div>
               <span class="status warning" id="track-status">Bekleniyor</span>
             </div>
 
-            <div id="track-empty" class="empty-state">E-posta ve açıklama kodu girildiğinde sipariş durumu burada görünür.</div>
+            <div id="track-empty" class="empty-state">E-posta adresinizi ve açıklama kodunu girdiğinizde sipariş durumu burada görünür.</div>
             <div id="track-result" hidden>
               <dl class="info-list">
                 <div>
@@ -170,7 +252,7 @@
                   <dd id="track-product">-</dd>
                 </div>
                 <div>
-                  <dt>Kod</dt>
+                  <dt>Açıklama kodu</dt>
                   <dd>
                     <button type="button" class="copy" id="track-reference-copy" data-copy="-">-</button>
                   </dd>
@@ -179,13 +261,80 @@
                   <dt>Tutar</dt>
                   <dd id="track-total">-</dd>
                 </div>
+                <div>
+                  <dt>Geçerlilik</dt>
+                  <dd id="track-expires">-</dd>
+                </div>
               </dl>
+
+              <div id="track-resume" class="resume-card" hidden>
+                <div class="resume-card-text">
+                  <strong id="track-resume-title">Bu sipariş için ödeme tamamlanmadı.</strong>
+                  <span id="track-resume-subtitle">Banka bilgileri ve dekont yükleme ekranına geri dönerek ödemeyi tamamlayabilirsiniz.</span>
+                </div>
+                <a class="button primary" id="track-resume-button" href="#">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                  Ödemeye devam et
+                </a>
+              </div>
+
               <ol class="timeline track-timeline" id="track-timeline"></ol>
             </div>
           </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <div class="section-head">
+                <span class="label">Takip</span>
+                <h2>Sorgulama bilgileri</h2>
+              </div>
+            </div>
+
+            <form id="track-form" class="track-form" novalidate>
+              <label class="field" for="track-email">
+                <span>E-posta</span>
+                <input id="track-email" name="email" type="email" autocomplete="email" inputmode="email" required>
+              </label>
+              <label class="field" for="track-reference">
+                <span>Açıklama kodu</span>
+                <input id="track-reference" name="reference" type="text" autocomplete="off" required placeholder="ÖR. QLN-8F3K2">
+              </label>
+              <button type="submit" class="button primary full">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+                Durumu kontrol et
+              </button>
+              <p class="helper">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                Açıklama kodu ödeme başlatıldığında size verilen koddur (örn. QLN-XXXXX veya PRC-XXXXX).
+              </p>
+            </form>
+          </section>
         </div>
+
+        <section class="faq" aria-label="Sipariş takip yardımı">
+          <h2>Yardım</h2>
+          <details>
+            <summary>Açıklama kodumu kaybettim, ne yapabilirim?</summary>
+            <p>Ödeme başlatıldığında uygulama içinde gösterilen kodu ya da e-posta bildiriminizi kontrol edin. Bulamıyorsanız hesabınızla giriş yaptığınız Qlinik veya Praticase uygulaması üzerinden yeni bir ödeme talebi oluşturulabilir.</p>
+          </details>
+          <details>
+            <summary>Sipariş bulunamadı diyor.</summary>
+            <p>E-posta ve açıklama kodu, ödemeyi başlatırken kullanılan değerlerle birebir eşleşmelidir. Boşluk ve büyük/küçük harflere dikkat edin. 24 saatten eski ve dekont yüklenmemiş ödemeler kapanmış olabilir.</p>
+          </details>
+        </section>
       </section>
     </main>
+
+    <footer class="footer">
+      <div class="footer-side">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Bağlantı SSL ile şifrelenir. MedAsi sizden kart bilgisi istemez.</span>
+      </div>
+      <div class="footer-side">
+        <span>© MedAsi Teknoloji A.Ş.</span>
+        <a href="mailto:destek@medasi.com.tr">destek@medasi.com.tr</a>
+      </div>
+    </footer>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>
