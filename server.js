@@ -46,6 +46,11 @@ async function route(request, response) {
     return;
   }
 
+  if (pathname === "/api/support") {
+    await routeSupport(request, response, method);
+    return;
+  }
+
   if (method === "POST" && pathname === "/api/checkout-sessions") {
     requireServiceKey(request);
     const order = await createOrder(await readJson(request));
@@ -205,6 +210,188 @@ async function routeAdmin(request, response, method, pathname, url) {
   }
 
   sendJson(response, 404, { error: "Admin endpoint bulunamadı." });
+}
+
+const supportRateState = new Map();
+const SUPPORT_RATE_WINDOW_MS = 10 * 60 * 1000;
+const SUPPORT_RATE_LIMIT = 5;
+
+function supportCorsAllowed() {
+  const raw = stringValue(process.env.SUPPORT_CORS_ORIGINS) ||
+    "https://odeme.medasi.com.tr,https://indir.medasi.com.tr";
+  return raw.split(",").map((value) => value.trim()).filter(Boolean);
+}
+
+function supportCorsHeaders(request) {
+  const origin = stringValue(request.headers.origin);
+  if (!origin) return {};
+  const allowed = supportCorsAllowed();
+  if (!allowed.includes(origin)) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "600",
+    "Vary": "Origin",
+  };
+}
+
+function clientIp(request) {
+  const forwarded = String(request.headers["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+  return forwarded || request.socket?.remoteAddress || "unknown";
+}
+
+function checkSupportRateLimit(ip) {
+  const now = Date.now();
+  const state = supportRateState.get(ip);
+  if (!state || state.resetAt < now) {
+    supportRateState.set(ip, { count: 1, resetAt: now + SUPPORT_RATE_WINDOW_MS });
+    return true;
+  }
+  if (state.count >= SUPPORT_RATE_LIMIT) return false;
+  state.count += 1;
+  return true;
+}
+
+async function routeSupport(request, response, method) {
+  const headers = supportCorsHeaders(request);
+  if (method === "OPTIONS") {
+    response.writeHead(204, headers);
+    response.end();
+    return;
+  }
+  if (method !== "POST") {
+    sendJson(response, 405, { error: "Method not allowed" }, headers);
+    return;
+  }
+
+  try {
+    const ip = clientIp(request);
+    if (!checkSupportRateLimit(ip)) {
+      sendJson(response, 429, {
+        error: "Çok fazla istek. Lütfen birkaç dakika sonra tekrar deneyin.",
+      }, headers);
+      return;
+    }
+
+    const body = await readJson(request);
+
+    if (stringValue(body.website)) {
+      sendJson(response, 200, { ok: true }, headers);
+      return;
+    }
+
+    const name = stringValue(body.name).slice(0, 200);
+    const email = normalizeEmail(stringValue(body.email)).slice(0, 320);
+    const subject = stringValue(body.subject).slice(0, 200);
+    const message = stringValue(body.message).slice(0, 5000);
+    const source = enumValue(body.source, ["odeme", "indir"], "odeme");
+
+    if (!name) throw httpError(400, "Ad zorunlu.");
+    if (!isValidSupportEmail(email)) throw httpError(400, "Geçerli bir e-posta girin.");
+    if (message.length < 10) throw httpError(400, "Mesaj en az 10 karakter olmalı.");
+
+    const apiKey = stringValue(process.env.RESEND_API_KEY);
+    if (!apiKey) throw httpError(503, "Destek servisi şu an yapılandırılmamış.");
+
+    const supportTo = stringValue(process.env.SUPPORT_EMAIL) || "destek@medasi.com.tr";
+    const supportFrom = stringValue(process.env.SUPPORT_FROM_EMAIL) ||
+      "MedAsi Destek <destek@medasi.com.tr>";
+    const sourceLabel = source === "indir" ? "MedAsi İndirme" : "MedAsi Ödeme";
+    const subjectLine = subject
+      ? `[${sourceLabel}] ${subject}`
+      : `[${sourceLabel}] Yeni destek talebi`;
+
+    await sendResendEmail(apiKey, {
+      from: supportFrom,
+      to: supportTo,
+      replyTo: email,
+      subject: subjectLine,
+      html: renderSupportEmailHtml({ name, email, subject, message, source: sourceLabel, ip }),
+      text: renderSupportEmailText({ name, email, subject, message, source: sourceLabel }),
+    });
+
+    sendJson(response, 200, { ok: true }, headers);
+  } catch (error) {
+    const status = error.statusCode || 500;
+    const message = status === 500 ? "Beklenmeyen destek servisi hatası." : error.message;
+    if (status === 500) console.error(error);
+    sendJson(response, status, { error: message }, headers);
+  }
+}
+
+function isValidSupportEmail(value) {
+  if (!value || value.length > 254) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function escapeHtmlValue(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  })[char]);
+}
+
+function renderSupportEmailHtml({ name, email, subject, message, source, ip }) {
+  const esc = escapeHtmlValue;
+  const subjectRow = subject
+    ? `<tr><td style="padding:6px 12px;color:#64748b;">Konu</td><td style="padding:6px 12px;"><strong>${esc(subject)}</strong></td></tr>`
+    : "";
+  return `<div style="font-family:-apple-system,Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#0f172a;">
+  <h2 style="color:#0f766e;margin:0 0 8px;">Yeni destek talebi</h2>
+  <p style="color:#64748b;margin:0 0 16px;">${esc(source)}</p>
+  <table style="border-collapse:collapse;width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+    <tr><td style="padding:8px 12px;color:#64748b;">Ad</td><td style="padding:8px 12px;"><strong>${esc(name)}</strong></td></tr>
+    <tr><td style="padding:8px 12px;color:#64748b;">E-posta</td><td style="padding:8px 12px;"><a href="mailto:${esc(email)}" style="color:#0f766e;">${esc(email)}</a></td></tr>
+    ${subjectRow}
+  </table>
+  <h3 style="margin:20px 0 8px;">Mesaj</h3>
+  <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;white-space:pre-wrap;">${esc(message)}</div>
+  <p style="color:#94a3b8;font-size:12px;margin-top:20px;">Kaynak: ${esc(source)} · IP: ${esc(ip)}</p>
+</div>`;
+}
+
+function renderSupportEmailText({ name, email, subject, message, source }) {
+  const subjectLine = subject ? `Konu: ${subject}\n` : "";
+  return `Yeni destek talebi (${source})\n\nAd: ${name}\nE-posta: ${email}\n${subjectLine}\nMesaj:\n${message}\n`;
+}
+
+async function sendResendEmail(apiKey, payload) {
+  const requestBody = {
+    from: payload.from,
+    to: Array.isArray(payload.to) ? payload.to : [payload.to],
+    subject: payload.subject,
+    html: payload.html,
+    text: payload.text,
+  };
+  if (payload.replyTo) requestBody.reply_to = payload.replyTo;
+
+  let response;
+  try {
+    response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (error) {
+    console.error("Resend network error:", error);
+    throw httpError(502, "Destek sağlayıcısına ulaşılamadı.");
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    console.error("Resend error:", response.status, errorText.slice(0, 500));
+    throw httpError(502, "Mesaj iletilemedi. Lütfen daha sonra tekrar deneyin.");
+  }
+  return response.json().catch(() => ({}));
 }
 
 async function createOrder(input) {
@@ -703,11 +890,12 @@ function readApiKey(request) {
   );
 }
 
-function sendJson(response, status, body) {
+function sendJson(response, status, body, extraHeaders) {
   response.writeHead(status, {
     "Cache-Control": "no-store",
     "Content-Type": "application/json; charset=utf-8",
     "X-Content-Type-Options": "nosniff",
+    ...(extraHeaders || {}),
   });
   response.end(JSON.stringify(body));
 }

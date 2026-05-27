@@ -848,10 +848,67 @@
     });
   }
 
+  function bindSupportForm() {
+    var form = $("#support-form");
+    if (!form) return;
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var submit = $("#support-submit");
+      var nameValue = $("#support-name").value.trim();
+      var emailValue = $("#support-email").value.trim();
+      var subjectValue = $("#support-subject").value.trim();
+      var messageValue = $("#support-message").value.trim();
+      var honeypotValue = $("#support-website").value;
+
+      if (!nameValue || !emailValue || messageValue.length < 10) {
+        toast("Lütfen ad, e-posta ve en az 10 karakterlik mesaj girin.");
+        return;
+      }
+
+      var originalHTML = submit.innerHTML;
+      submit.disabled = true;
+      submit.textContent = "Gönderiliyor…";
+
+      var endpoint = (API_BASE || "") + "/api/support";
+      fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          name: nameValue,
+          email: emailValue,
+          subject: subjectValue,
+          message: messageValue,
+          website: honeypotValue,
+          source: "odeme"
+        })
+      }).then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (data) {
+          if (!response.ok) {
+            throw new Error(data.error || "Gönderim hatası");
+          }
+          return data;
+        });
+      }).then(function () {
+        toast("Mesajınız iletildi. Ekibimiz en kısa sürede dönecektir.");
+        form.reset();
+      }).catch(function (error) {
+        toast(error && error.message ? error.message : "Mesaj gönderilemedi.");
+      }).finally(function () {
+        submit.disabled = false;
+        submit.innerHTML = originalHTML;
+      });
+    });
+  }
+
   function bindEvents() {
     bindCopyEvents();
     bindReceiptForm();
     bindTrackForm();
+    bindSupportForm();
   }
 
   function bootPayment() {

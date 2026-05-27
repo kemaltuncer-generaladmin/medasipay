@@ -1046,6 +1046,66 @@ input[type="file"] {
   width: 1px;
 }
 
+.support-section {
+  margin-top: 28px;
+}
+
+.support-intro {
+  margin: 0 0 16px;
+  max-width: 620px;
+}
+
+.support-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.support-form textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+
+.support-form .field {
+  margin: 0;
+}
+
+.support-form .field span {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.form-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.form-row .helper {
+  flex: 1;
+  margin: 0;
+  min-width: 220px;
+}
+
+.hp {
+  left: -9999px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
 .resume-card {
   align-items: center;
   background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
@@ -1146,6 +1206,19 @@ input[type="file"] {
   }
 
   .resume-card .button {
+    width: 100%;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .form-row .button {
     width: 100%;
   }
 }
