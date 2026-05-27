@@ -17,6 +17,10 @@ const defaultBankAccount = {
   holder: "MedAsi Teknoloji A.Ş.",
   iban: "TR11 0006 2000 0000 0123 4567 89",
 };
+const defaultPaymentWebhookUrls = {
+  qlinik: "https://qlinik.medasi.com.tr/functions/v1/qlinik",
+  praticase: "https://qlinik.medasi.com.tr/functions/v1/praticase-storekit-verify",
+};
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -67,6 +71,7 @@ async function route(request, response) {
     if (!multipart.file) throw httpError(400, "Dekont dosyası eksik.");
     const updated = await updateOrder(receiptMatch[1], (order) => {
       if (order.token !== token) throw httpError(403, "Ödeme tokenı eşleşmedi.");
+      if (isExpired(order)) throw httpError(410, "Ödeme oturumunun süresi doldu.");
       if (isTerminalStatus(order.status)) {
         throw httpError(409, "Bu sipariş artık dekont kabul etmiyor.");
       }
@@ -142,8 +147,8 @@ async function routeAdmin(request, response, method, pathname, url) {
       sendJson(response, 404, { error: "Dekont bulunamadı." });
       return;
     }
-    const filePath = order.receipt.storagePath;
-    if (!filePath.startsWith(receiptDir)) {
+    const filePath = path.resolve(order.receipt.storagePath);
+    if (!filePath.startsWith(`${path.resolve(receiptDir)}${path.sep}`)) {
       sendJson(response, 403, { error: "Dekont yolu geçersiz." });
       return;
     }
@@ -151,8 +156,10 @@ async function routeAdmin(request, response, method, pathname, url) {
     response.writeHead(200, {
       "Cache-Control": "no-store",
       "Content-Type": order.receipt.mimeType,
+      "Content-Security-Policy": "sandbox",
       "Content-Disposition":
         `inline; filename="${safeHeaderFilename(order.receipt.originalName)}"`,
+      "X-Content-Type-Options": "nosniff",
     });
     response.end(file);
     return;
@@ -169,12 +176,18 @@ async function routeAdmin(request, response, method, pathname, url) {
   if (method === "POST" && rejectMatch) {
     const body = await readJson(request);
     const reason = stringValue(body.reason).slice(0, 500);
-    const updated = await updateOrder(rejectMatch[1], (order) => ({
-      ...order,
-      status: "rejected",
-      rejectionReason: reason,
-      updatedAt: new Date().toISOString(),
-    }));
+    const updated = await updateOrder(rejectMatch[1], (order) => {
+      if (order.status === "entitled" || order.status === "approved") {
+        throw httpError(409, "Onaylanmış sipariş reddedilemez.");
+      }
+      if (order.status === "rejected") return order;
+      return {
+        ...order,
+        status: "rejected",
+        rejectionReason: reason,
+        updatedAt: new Date().toISOString(),
+      };
+    });
     sendJson(response, 200, { order: adminOrder(updated) });
     return;
   }
@@ -207,6 +220,9 @@ async function createOrder(input) {
   if (Number.isNaN(expiresAt.getTime())) {
     throw httpError(400, "Geçerlilik tarihi hatalı.");
   }
+  if (expiresAt <= now || expiresAt.getTime() > now.getTime() + 24 * 3600 * 1000) {
+    throw httpError(400, "Ödeme oturumu geçerlilik süresi uygun değil.");
+  }
 
   const store = await readStore();
   const token = uniqueValue(store.orders, "token", () =>
@@ -227,7 +243,7 @@ async function createOrder(input) {
     customerName,
     customerEmail,
     returnUrl: optionalUrl(input.returnUrl),
-    webhookUrl: optionalUrl(input.webhookUrl),
+    webhookUrl: paymentWebhookUrl(input.webhookUrl, product),
     bankAccount: paymentBankAccount,
     items,
     totalAmount: totalAmount(items),
@@ -262,10 +278,20 @@ function normalizeItems(items) {
   return items.map((item) => {
     const source = objectValue(item);
     const quantity = numberValue(source.quantity) || 1;
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100) {
+      throw httpError(400, "Paket adedi geçersiz.");
+    }
     const priceCents = numberValue(source.priceCents);
+    if (priceCents !== null &&
+      (!Number.isSafeInteger(priceCents) || priceCents <= 0)) {
+      throw httpError(400, "Paket tutarı geçersiz.");
+    }
     const unitPrice = priceCents !== null
       ? priceCents / 100
       : numberValue(source.unitPrice ?? source.price ?? source.amount) || 0;
+    if (!Number.isSafeInteger(Math.round(unitPrice * 100)) || unitPrice <= 0) {
+      throw httpError(400, "Paket tutarı geçersiz.");
+    }
     return {
       sku: requiredString(source.sku || source.code, "item.sku"),
       name: requiredString(source.name, "item.name"),
@@ -366,11 +392,17 @@ async function saveReceipt(order, file) {
 }
 
 async function approveOrder(orderId, body) {
-  const approved = await updateOrder(orderId, (order) => ({
-    ...order,
-    status: "approved",
-    updatedAt: new Date().toISOString(),
-  }));
+  const approved = await updateOrder(orderId, (order) => {
+    if (!order.receipt) throw httpError(409, "Dekont yüklenmeden sipariş onaylanamaz.");
+    if (order.status === "rejected") throw httpError(409, "Reddedilmiş sipariş onaylanamaz.");
+    if (order.status === "entitled") return order;
+    return {
+      ...order,
+      status: "approved",
+      updatedAt: new Date().toISOString(),
+    };
+  });
+  if (approved.status === "entitled") return approved;
   if (body.skipGrant === true) return approved;
   return grantEntitlement(orderId, body);
 }
@@ -378,6 +410,11 @@ async function approveOrder(orderId, body) {
 async function grantEntitlement(orderId, body) {
   const order = await findOrder(orderId);
   if (!order) throw httpError(404, "Sipariş bulunamadı.");
+  if (order.status === "entitled") return order;
+  if (!order.receipt) throw httpError(409, "Dekont yüklenmeden hak tanımlanamaz.");
+  if (order.status !== "approved") {
+    throw httpError(409, "Hak tanımından önce sipariş onaylanmalı.");
+  }
   if (!order.webhookUrl) {
     return updateOrder(orderId, (item) => ({
       ...item,
@@ -510,17 +547,16 @@ async function readMultipart(request) {
       "";
     const name = disposition.match(/name="([^"]+)"/)?.[1] || "";
     const filename = disposition.match(/filename="([^"]*)"/)?.[1] || "";
-    const mimeType = headerText.match(/content-type:\s*([^\r\n]+)/i)?.[1]
-      ?.trim() || "application/octet-stream";
     if (!name) continue;
     if (filename) {
       if (content.length > maxReceiptBytes) {
         throw httpError(413, "Dekont dosyası çok büyük.");
       }
-      if (!isAllowedReceiptMime(mimeType)) {
+      const detectedMimeType = detectReceiptMime(content);
+      if (!detectedMimeType) {
         throw httpError(415, "Dekont PDF, PNG veya JPG olmalı.");
       }
-      file = { fieldName: name, filename, mimeType, buffer: content };
+      file = { fieldName: name, filename, mimeType: detectedMimeType, buffer: content };
     } else {
       fields[name] = content.toString("utf8");
     }
@@ -712,6 +748,21 @@ function optionalUrl(value) {
   }
 }
 
+function paymentWebhookUrl(value, product) {
+  const webhookUrl = optionalUrl(value);
+  if (process.env.APP_ENV !== "production") return webhookUrl;
+  const envName = product === "praticase"
+    ? "PRATICASE_PAYMENT_WEBHOOK_URL"
+    : "QLINIK_PAYMENT_WEBHOOK_URL";
+  const expectedUrl = optionalUrl(
+    process.env[envName] || defaultPaymentWebhookUrls[product],
+  );
+  if (!webhookUrl || webhookUrl !== expectedUrl) {
+    throw httpError(400, "Ödeme webhook adresi geçersiz.");
+  }
+  return webhookUrl;
+}
+
 function enumValue(value, choices, fallback) {
   const text = stringValue(value).toLowerCase();
   return choices.includes(text) ? text : fallback;
@@ -746,13 +797,20 @@ function trimTrailingSlash(value) {
   return String(value || "").replace(/\/+$/, "");
 }
 
-function isAllowedReceiptMime(value) {
-  return [
-    "application/pdf",
-    "image/png",
-    "image/jpeg",
-    "image/jpg",
-  ].includes(String(value).toLowerCase());
+function detectReceiptMime(buffer) {
+  if (buffer.subarray(0, 5).toString("ascii") === "%PDF-") {
+    return "application/pdf";
+  }
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(
+    Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+  )) {
+    return "image/png";
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 &&
+    buffer[2] === 0xFF) {
+    return "image/jpeg";
+  }
+  return "";
 }
 
 function cacheControl(filePath) {

@@ -93,6 +93,12 @@ listesini, paket bilgisini, müşteri e-postasını, açıklama kodunu ve dekont
 endpointlerden okuyabilir. Sipariş onaylandığında servis `MEDASIPAY_WEBHOOK_SECRET`
 ile imzalı entitlement webhook gönderir.
 
+Canlı ortamda hak tanımı yalnız ürünün beklenen webhook hedefiyle eşleşen
+checkout oturumlarına yapılır (`QLINIK_PAYMENT_WEBHOOK_URL` ve
+`PRATICASE_PAYMENT_WEBHOOK_URL`). Admin onayı ve hak tanımı için dekont
+yüklenmiş olmalıdır; servis dekontu boyut sınırı yanında PDF/PNG/JPEG dosya
+imzasından da doğrular ve süresi dolmuş ödeme oturumuna yükleme kabul etmez.
+
 ## Üretim sınırı
 
 Ödeme servisi kendi deposu, kendi domaini ve kendi verisi ile bağımsız
