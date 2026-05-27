@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
+const http2 = require("node:http2");
 const http = require("node:http");
 const path = require("node:path");
 
@@ -10,6 +11,7 @@ const appUrl = trimTrailingSlash(
 const dataDir = process.env.DATA_DIR || path.join(__dirname, "data");
 const receiptDir = path.join(dataDir, "receipts");
 const ordersFile = path.join(dataDir, "orders.json");
+const devicesFile = path.join(dataDir, "admin-devices.json");
 const publicDir = __dirname;
 const maxJsonBytes = 128 * 1024;
 const maxReceiptBytes = Number(process.env.MAX_RECEIPT_BYTES || 10 * 1024 * 1024);
@@ -22,6 +24,8 @@ const defaultPaymentWebhookUrls = {
   praticase: "https://qlinik.medasi.com.tr/functions/v1/praticase-storekit-verify",
 };
 let storeMutationQueue = Promise.resolve();
+let deviceMutationQueue = Promise.resolve();
+let cachedApnsJwt = null;
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -83,6 +87,9 @@ async function route(request, response) {
       }
       return saveReceipt(order, multipart.file);
     });
+    notifyReceiptUploaded(updated).catch((error) => {
+      console.error("Receipt push notification failed", error);
+    });
     sendJson(response, 200, publicOrder(updated));
     return;
   }
@@ -123,6 +130,19 @@ async function route(request, response) {
 
 async function routeAdmin(request, response, method, pathname, url) {
   requireAdminKey(request);
+
+  if (method === "POST" && pathname === "/api/admin/push-devices") {
+    const device = await registerPushDevice(await readJson(request));
+    sendJson(response, 200, { device });
+    return;
+  }
+
+  if (method === "DELETE" && pathname === "/api/admin/push-devices") {
+    const body = await readJson(request);
+    await deletePushDevice(requiredDeviceToken(body.deviceToken));
+    sendJson(response, 200, { ok: true });
+    return;
+  }
 
   if (method === "GET" && pathname === "/api/admin/orders") {
     const status = stringValue(url.searchParams.get("status"));
@@ -751,6 +771,277 @@ async function writeStore(store) {
   await fs.rename(tmp, ordersFile);
 }
 
+async function readDeviceStore() {
+  await ensureDataDirs();
+  try {
+    const content = await fs.readFile(devicesFile, "utf8");
+    const parsed = JSON.parse(content);
+    return { devices: Array.isArray(parsed.devices) ? parsed.devices : [] };
+  } catch (error) {
+    if (error.code === "ENOENT") return { devices: [] };
+    throw error;
+  }
+}
+
+async function writeDeviceStore(store) {
+  await ensureDataDirs();
+  const tmp = `${devicesFile}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(store, null, 2));
+  await fs.rename(tmp, devicesFile);
+}
+
+async function mutateDeviceStore(mutation) {
+  const operation = deviceMutationQueue.then(async () => {
+    const store = await readDeviceStore();
+    const result = await mutation(store);
+    await writeDeviceStore(store);
+    return result;
+  });
+  deviceMutationQueue = operation.catch(() => {});
+  return operation;
+}
+
+async function registerPushDevice(input) {
+  const token = requiredDeviceToken(input.deviceToken);
+  const now = new Date().toISOString();
+  const platform = stringValue(input.platform) || "ios";
+  const environment = enumValue(input.environment, ["sandbox", "production"], apnsEnvironment());
+  const appVersion = stringValue(input.appVersion);
+  const bundleId = stringValue(input.bundleId) ||
+    process.env.APNS_BUNDLE_ID ||
+    "com.medasi.adminpanel";
+
+  return mutateDeviceStore((store) => {
+    const existing = store.devices.find((device) => device.deviceToken === token);
+    const device = {
+      deviceToken: token,
+      platform,
+      environment,
+      bundleId,
+      appVersion,
+      enabled: true,
+      registeredAt: existing?.registeredAt || now,
+      lastSeenAt: now,
+    };
+    if (existing) {
+      Object.assign(existing, device);
+      return existing;
+    }
+    store.devices.push(device);
+    return device;
+  });
+}
+
+async function deletePushDevice(token) {
+  return mutateDeviceStore((store) => {
+    store.devices = store.devices.filter((device) => device.deviceToken !== token);
+    return true;
+  });
+}
+
+async function notifyReceiptUploaded(order) {
+  const config = await apnsConfig();
+  if (!config) return;
+
+  const store = await readDeviceStore();
+  const devices = store.devices.filter((device) =>
+    device.enabled !== false &&
+    device.platform === "ios" &&
+    (!device.environment || device.environment === config.environment)
+  );
+  if (!devices.length) return;
+
+  const payload = receiptPushPayload(order);
+  const results = await Promise.allSettled(
+    devices.map((device) => sendApnsNotification(config, device, payload)),
+  );
+  for (let index = 0; index < results.length; index++) {
+    const result = results[index];
+    if (
+      result.status === "fulfilled" &&
+      ["BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic"].includes(result.value.reason)
+    ) {
+      await deletePushDevice(devices[index].deviceToken);
+    } else if (result.status === "rejected") {
+      console.error("APNs send failed", result.reason);
+    }
+  }
+}
+
+function receiptPushPayload(order) {
+  const product = String(order.product || "MedAsi").toUpperCase();
+  const amount = formatPushMoney(order.totalAmount, order.currency);
+  const body = [
+    order.customerName || order.customerEmail || "Yeni müşteri",
+    order.reference,
+    amount,
+  ].filter(Boolean).join(" | ");
+  const sound = process.env.APNS_CRITICAL_ALERTS === "true"
+    ? { critical: 1, name: "default", volume: 1.0 }
+    : "default";
+
+  return {
+    aps: {
+      alert: {
+        title: `Yeni ${product} dekontu`,
+        body,
+      },
+      sound,
+      "interruption-level": process.env.APNS_CRITICAL_ALERTS === "true"
+        ? "critical"
+        : "time-sensitive",
+    },
+    orderId: order.id,
+    reference: order.reference,
+    product: order.product,
+    status: order.status,
+    type: "receipt_uploaded",
+  };
+}
+
+async function apnsConfig() {
+  const teamId = stringValue(process.env.APNS_TEAM_ID);
+  const keyId = stringValue(process.env.APNS_KEY_ID);
+  const bundleId = stringValue(process.env.APNS_BUNDLE_ID) || "com.medasi.adminpanel";
+  const privateKey = await apnsPrivateKey();
+  if (!teamId || !keyId || !privateKey) return null;
+  return {
+    teamId,
+    keyId,
+    bundleId,
+    privateKey,
+    environment: apnsEnvironment(),
+    host: apnsEnvironment() === "production"
+      ? "https://api.push.apple.com"
+      : "https://api.sandbox.push.apple.com",
+  };
+}
+
+async function apnsPrivateKey() {
+  const inline = stringValue(process.env.APNS_AUTH_KEY);
+  if (inline) return normalizePrivateKey(inline);
+  const keyPath = stringValue(process.env.APNS_AUTH_KEY_PATH);
+  if (!keyPath) return "";
+  return normalizePrivateKey(await fs.readFile(keyPath, "utf8"));
+}
+
+function apnsEnvironment() {
+  return process.env.APNS_ENVIRONMENT === "production" ||
+    process.env.APP_ENV === "production"
+    ? "production"
+    : "sandbox";
+}
+
+function normalizePrivateKey(value) {
+  return String(value || "").replace(/\\n/g, "\n").trim();
+}
+
+async function sendApnsNotification(config, device, payload) {
+  const token = requiredDeviceToken(device.deviceToken);
+  const jwt = apnsJwt(config);
+  const response = await apnsRequest(config, token, jwt, payload);
+  if (response.status < 200 || response.status >= 300) {
+    console.error("APNs rejected notification", response);
+  }
+  return response;
+}
+
+function apnsJwt(config) {
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedApnsJwt && cachedApnsJwt.keyId === config.keyId &&
+    cachedApnsJwt.teamId === config.teamId && now - cachedApnsJwt.iat < 45 * 60) {
+    return cachedApnsJwt.token;
+  }
+
+  const header = base64UrlJson({ alg: "ES256", kid: config.keyId });
+  const claims = base64UrlJson({ iss: config.teamId, iat: now });
+  const signingInput = `${header}.${claims}`;
+  const derSignature = crypto.sign(
+    "sha256",
+    Buffer.from(signingInput),
+    config.privateKey,
+  );
+  const signature = derSignatureToJose(derSignature, 64).toString("base64url");
+  const token = `${signingInput}.${signature}`;
+  cachedApnsJwt = { keyId: config.keyId, teamId: config.teamId, iat: now, token };
+  return token;
+}
+
+function apnsRequest(config, token, jwt, payload) {
+  return new Promise((resolve, reject) => {
+    const client = http2.connect(config.host);
+    const body = JSON.stringify(payload);
+    let responseBody = "";
+    let status = 0;
+
+    client.on("error", reject);
+
+    const request = client.request({
+      ":method": "POST",
+      ":path": `/3/device/${token}`,
+      authorization: `bearer ${jwt}`,
+      "content-type": "application/json",
+      "apns-topic": config.bundleId,
+      "apns-push-type": "alert",
+      "apns-priority": "10",
+    });
+
+    request.setEncoding("utf8");
+    request.on("response", (headers) => {
+      status = Number(headers[":status"] || 0);
+    });
+    request.on("data", (chunk) => {
+      responseBody += chunk;
+    });
+    request.on("end", () => {
+      client.close();
+      let reason = "";
+      try {
+        reason = JSON.parse(responseBody).reason || "";
+      } catch {
+        reason = responseBody;
+      }
+      resolve({ status, reason });
+    });
+    request.on("error", (error) => {
+      client.close();
+      reject(error);
+    });
+    request.end(body);
+  });
+}
+
+function base64UrlJson(value) {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function derSignatureToJose(signature, partLength) {
+  const bytes = Buffer.from(signature);
+  if (bytes[0] !== 0x30) throw new Error("APNs imza biçimi geçersiz.");
+  let offset = 2;
+  if (bytes[1] & 0x80) {
+    offset = 2 + (bytes[1] & 0x7f);
+  }
+  if (bytes[offset] !== 0x02) throw new Error("APNs imza R alanı geçersiz.");
+  const rLength = bytes[offset + 1];
+  const r = bytes.subarray(offset + 2, offset + 2 + rLength);
+  offset += 2 + rLength;
+  if (bytes[offset] !== 0x02) throw new Error("APNs imza S alanı geçersiz.");
+  const sLength = bytes[offset + 1];
+  const s = bytes.subarray(offset + 2, offset + 2 + sLength);
+  return Buffer.concat([leftPadSignaturePart(r, partLength / 2), leftPadSignaturePart(s, partLength / 2)]);
+}
+
+function leftPadSignaturePart(value, length) {
+  let bytes = value;
+  while (bytes.length > length && bytes[0] === 0) {
+    bytes = bytes.subarray(1);
+  }
+  if (bytes.length > length) throw new Error("APNs imza alanı çok uzun.");
+  if (bytes.length === length) return bytes;
+  return Buffer.concat([Buffer.alloc(length - bytes.length), bytes]);
+}
+
 async function ensureDataDirs() {
   await fs.mkdir(receiptDir, { recursive: true });
 }
@@ -975,6 +1266,14 @@ function requiredString(value, name) {
   return text;
 }
 
+function requiredDeviceToken(value) {
+  const token = stringValue(value).replace(/[^a-f0-9]/gi, "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(token)) {
+    throw httpError(400, "APNs cihaz tokenı geçersiz.");
+  }
+  return token;
+}
+
 function optionalUrl(value) {
   const text = stringValue(value);
   if (!text) return "";
@@ -1033,6 +1332,15 @@ function normalizeEmail(value) {
 
 function normalizeReference(value) {
   return stringValue(value).toUpperCase().replace(/\s+/g, "");
+}
+
+function formatPushMoney(amount, currency) {
+  const numeric = numberValue(amount);
+  if (numeric === null) return "";
+  return `${numeric.toLocaleString("tr-TR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} ${stringValue(currency) || "TRY"}`;
 }
 
 function trimTrailingSlash(value) {

@@ -153,10 +153,28 @@ korunmalıdır.
 GET /api/admin/orders
 GET /api/admin/orders/ord_1001
 GET /api/admin/orders/ord_1001/receipt
+POST /api/admin/push-devices
+DELETE /api/admin/push-devices
 ```
 
 `GET /api/admin/orders/:id/receipt` dekontu `inline` olarak döndürür; panel bu
 yanıtı dosya önizleme veya indirme için kullanabilir.
+
+Admin panel iOS uygulaması APNs cihaz tokenını login durumundan bağımsız olarak
+`POST /api/admin/push-devices` ile kaydeder:
+
+```json
+{
+  "deviceToken": "64_hex_apns_token",
+  "platform": "ios",
+  "environment": "production",
+  "bundleId": "com.medasi.adminpanel",
+  "appVersion": "1.0"
+}
+```
+
+Her başarılı dekont yüklemesinde ödeme servisi kayıtlı admin cihazlarına sesli
+push bildirimi gönderir.
 
 ## Entitlement webhook
 

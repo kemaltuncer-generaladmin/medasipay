@@ -84,6 +84,8 @@ Servis canlı olarak şu endpointleri sağlar:
 - `GET /api/admin/orders`
 - `GET /api/admin/orders/:id`
 - `GET /api/admin/orders/:id/receipt`
+- `POST /api/admin/push-devices`
+- `DELETE /api/admin/push-devices`
 - `POST /api/admin/orders/:id/approve`
 - `POST /api/admin/orders/:id/reject`
 - `POST /api/admin/orders/:id/grant-entitlement`
@@ -92,6 +94,14 @@ Admin endpointleri `MEDASIPAY_ADMIN_KEY` ile korunur. Admin panel sipariş
 listesini, paket bilgisini, müşteri e-postasını, açıklama kodunu ve dekontu bu
 endpointlerden okuyabilir. Sipariş onaylandığında servis `MEDASIPAY_WEBHOOK_SECRET`
 ile imzalı entitlement webhook gönderir.
+
+Admin panel uygulaması APNs cihaz tokenını `POST /api/admin/push-devices`
+ile kaydeder. Dekont yüklendiğinde ödeme servisi kayıtlı iOS admin cihazlarına
+sesli push bildirimi gönderir. APNs için `APNS_TEAM_ID`, `APNS_KEY_ID`,
+`APNS_BUNDLE_ID` ve `APNS_AUTH_KEY_PATH` veya `APNS_AUTH_KEY` tanımlanmalıdır.
+`APNS_CRITICAL_ALERTS=true` yalnız Apple Critical Alerts entitlement varsa
+kullanılmalıdır; aksi halde servis normal sesli ve time-sensitive bildirim
+gönderir.
 
 Canlı ortamda hak tanımı yalnız ürünün beklenen webhook hedefiyle eşleşen
 checkout oturumlarına yapılır (`QLINIK_PAYMENT_WEBHOOK_URL` ve
