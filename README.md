@@ -100,6 +100,8 @@ yüklenmiş olmalıdır; servis dekontu boyut sınırı yanında PDF/PNG/JPEG do
 imzasından da doğrular ve süresi dolmuş ödeme oturumuna yükleme kabul etmez.
 Admin onayı onaylayan kullanıcıyı, zamanı ve hak tanımı denemelerini kaydeder;
 yeniden hak tanımı denemeleri paket süresini ilk onay anına sabit tutar.
+Aynı kullanıcı ve uygulama için açık bir abonelik ödeme oturumu varken yeni
+bir oturum üretmek yerine mevcut ödeme bağlantısı döndürülür.
 
 ## Üretim sınırı
 

@@ -21,6 +21,7 @@ const defaultPaymentWebhookUrls = {
   qlinik: "https://qlinik.medasi.com.tr/functions/v1/qlinik",
   praticase: "https://qlinik.medasi.com.tr/functions/v1/praticase-storekit-verify",
 };
+let storeMutationQueue = Promise.resolve();
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -226,38 +227,57 @@ async function createOrder(input) {
     throw httpError(400, "Ödeme oturumu geçerlilik süresi uygun değil.");
   }
 
-  const store = await readStore();
-  const token = uniqueValue(store.orders, "token", () =>
-    `pay_${productPrefix(product).toLowerCase()}_${randomCode(16).toLowerCase()}`
-  );
-  const reference = uniqueValue(store.orders, "reference", () =>
-    `${productPrefix(product)}-${randomCode(6)}`
-  );
   const paymentBankAccount = bankAccount();
-  const order = {
-    id: uniqueValue(store.orders, "id", () => `ord_${randomCode(18).toLowerCase()}`),
-    token,
-    reference,
-    status: "payment_pending",
-    product,
-    channel,
-    accountId,
-    customerName,
-    customerEmail,
-    returnUrl: optionalUrl(input.returnUrl),
-    webhookUrl: paymentWebhookUrl(input.webhookUrl, product),
-    bankAccount: paymentBankAccount,
-    items,
-    totalAmount: totalAmount(items),
-    currency: input.currency || items[0]?.currency || "TRY",
-    metadata: objectValue(input.metadata),
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-    expiresAt: expiresAt.toISOString(),
-  };
-  store.orders.push(order);
-  await writeStore(store);
-  return order;
+  const returnUrl = optionalUrl(input.returnUrl);
+  const webhookUrl = paymentWebhookUrl(input.webhookUrl, product);
+  return mutateStore(async (store) => {
+    const subscriptionSkus = items
+      .filter((item) => item.entitlementType === "subscription")
+      .map((item) => item.sku);
+    const existingOrder = subscriptionSkus.length
+      ? store.orders.find((order) =>
+        order.product === product &&
+        order.accountId === accountId &&
+        ["payment_pending", "receipt_uploaded", "approved"].includes(order.status) &&
+        !isExpired(order) &&
+        order.items.some((item) =>
+          item.entitlementType === "subscription" &&
+          subscriptionSkus.includes(item.sku)
+        )
+      )
+      : null;
+    if (existingOrder) return existingOrder;
+
+    const token = uniqueValue(store.orders, "token", () =>
+      `pay_${productPrefix(product).toLowerCase()}_${randomCode(16).toLowerCase()}`
+    );
+    const reference = uniqueValue(store.orders, "reference", () =>
+      `${productPrefix(product)}-${randomCode(6)}`
+    );
+    const order = {
+      id: uniqueValue(store.orders, "id", () => `ord_${randomCode(18).toLowerCase()}`),
+      token,
+      reference,
+      status: "payment_pending",
+      product,
+      channel,
+      accountId,
+      customerName,
+      customerEmail,
+      returnUrl,
+      webhookUrl,
+      bankAccount: paymentBankAccount,
+      items,
+      totalAmount: totalAmount(items),
+      currency: input.currency || items[0]?.currency || "TRY",
+      metadata: objectValue(input.metadata),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+    store.orders.push(order);
+    return order;
+  });
 }
 
 function bankAccount() {
@@ -505,13 +525,24 @@ async function findOrderByToken(token) {
 }
 
 async function updateOrder(orderId, updater) {
-  const store = await readStore();
-  const index = store.orders.findIndex((order) => order.id === orderId);
-  if (index < 0) throw httpError(404, "Sipariş bulunamadı.");
-  const updated = await updater(store.orders[index]);
-  store.orders[index] = updated;
-  await writeStore(store);
-  return updated;
+  return mutateStore(async (store) => {
+    const index = store.orders.findIndex((order) => order.id === orderId);
+    if (index < 0) throw httpError(404, "Sipariş bulunamadı.");
+    const updated = await updater(store.orders[index]);
+    store.orders[index] = updated;
+    return updated;
+  });
+}
+
+async function mutateStore(mutation) {
+  const operation = storeMutationQueue.then(async () => {
+    const store = await readStore();
+    const result = await mutation(store);
+    await writeStore(store);
+    return result;
+  });
+  storeMutationQueue = operation.catch(() => {});
+  return operation;
 }
 
 async function readStore() {
