@@ -10,6 +10,7 @@
     <title>MedAsi Ödeme — Güvenli sipariş ekranı</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="assets/styles.css?v=checkout-5">
+    <script src="https://cdn.jsdelivr.net/npm/motion@11.11.13/dist/motion.js"></script>
     <script src="assets/app.js?v=checkout-5" defer></script>
   </head>
   <body>
@@ -92,8 +93,8 @@
           <div class="trust-card" role="note">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6Z"/><path d="m9 12 2 2 4-4"/></svg>
             <div>
-              <strong>Ödemeniz MedAsi Teknoloji A.Ş. tarafından alınır.</strong>
-              <span>Kart bilgisi istemiyoruz. Bu sayfada yalnız banka transferi ile ödeme yapılır; dekontunuz yüklendikten sonra ekibimiz manuel doğrulama yapar.</span>
+              <strong>Kartla ödeme için sanal POS hazırlığı başladı.</strong>
+              <span>Şimdilik ödemeler, yasal vergilendirmesi yapılacak bireysel şahıs şirketi hesabına EFT/havale ile alınır. POS tarafı kurdele kesimini bitirince kartla ödeme de burada mümkün olacak.</span>
             </div>
           </div>
 
@@ -135,9 +136,26 @@
                   <span>Eksik tutar veya açıklama kodu olmadan yapılan transferler manuel inceleme nedeniyle gecikebilir.</span>
                 </div>
               </div>
+
+              <button type="button" class="button primary proceed-to-payment" id="proceed-to-payment">
+                Ödemeye geç
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </button>
             </section>
 
-            <section class="panel">
+            <section class="panel" id="bank-panel">
+              <div class="iban-hero" id="iban-hero" hidden>
+                <div class="iban-hero-inner">
+                  <span class="iban-hero-label">Havale / EFT yapılacak IBAN</span>
+                  <button type="button" class="iban-hero-btn" id="iban-hero-copy" data-copy="" title="IBAN'ı kopyala">
+                    <span class="iban-hero-number" id="iban-hero-number"></span>
+                    <svg class="iban-hero-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    <span class="iban-hero-copied" aria-live="polite"></span>
+                  </button>
+                  <span class="iban-hero-holder" id="iban-hero-holder"></span>
+                </div>
+              </div>
+
               <div class="section-title">
                 <div class="section-head">
                   <span class="label">Banka transferi</span>
@@ -148,7 +166,9 @@
               <dl class="info-list">
                 <div>
                   <dt>Alıcı</dt>
-                  <dd id="bank-holder">MedAsi Teknoloji A.Ş.</dd>
+                  <dd>
+                    <button type="button" class="copy" id="bank-holder" data-copy="" title="Alıcı adını kopyala">MedAsi Teknoloji A.Ş.</button>
+                  </dd>
                 </div>
                 <div>
                   <dt>IBAN</dt>
@@ -207,7 +227,7 @@
             <h2>Sıkça sorulan sorular</h2>
             <details>
               <summary>Kart bilgilerimi neden istemiyorsunuz?</summary>
-              <p>Bu sayfa sanal POS değildir. Ödemeniz yalnız banka EFT/havale ile alınır; dolayısıyla kart numarası, CVV veya OTP istenmez. Kart bilgilerinizi MedAsi'ye veya bu sayfaya asla girmeyin.</p>
+              <p>Sanal POS entegrasyonları başladı; kartla ödeme yakında açılacak. Şu an ödemeniz yasal vergilendirmesi yapılacak bireysel şahıs şirketi hesabına EFT/havale ile alınır. POS kurdele kesimini tamamlayana kadar kart numarası, CVV veya OTP istenmez; kart bilgilerinizi MedAsi'ye veya bu sayfaya asla girmeyin.</p>
             </details>
             <details>
               <summary>Açıklama kodunu yazmazsam ne olur?</summary>

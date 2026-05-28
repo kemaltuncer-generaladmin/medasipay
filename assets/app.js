@@ -579,6 +579,7 @@
     currentSession = session;
     $("#locked-screen").hidden = true;
     $("#checkout-screen").hidden = false;
+    animateCheckoutEntrance();
 
     $("#session-product-label").textContent = formatSessionLabel(session);
     $("#session-title").textContent = session.accountName;
@@ -589,9 +590,25 @@
 
     applyStatus("#session-status", session.status, "Ödeme bekleniyor");
 
-    $("#bank-holder").textContent = session.bankAccount.holder;
+    var bankHolder = $("#bank-holder");
+    if (bankHolder) {
+      bankHolder.textContent = session.bankAccount.holder;
+      bankHolder.setAttribute("data-copy", session.bankAccount.holder);
+    }
     $("#bank-iban").textContent = session.bankAccount.iban;
     $("#bank-iban").setAttribute("data-copy", session.bankAccount.iban);
+
+    var ibanHero = $("#iban-hero");
+    var ibanHeroNumber = $("#iban-hero-number");
+    var ibanHeroBtn = $("#iban-hero-copy");
+    var ibanHeroHolder = $("#iban-hero-holder");
+    if (ibanHeroNumber) ibanHeroNumber.textContent = session.bankAccount.iban;
+    if (ibanHeroBtn) ibanHeroBtn.setAttribute("data-copy", session.bankAccount.iban);
+    if (ibanHeroHolder) ibanHeroHolder.textContent = session.bankAccount.holder;
+    if (ibanHero) {
+      ibanHero.hidden = false;
+      animateIbanHero();
+    }
     $("#payment-reference").textContent = session.reference;
     $("#payment-reference").setAttribute("data-copy", session.reference);
     $("#bank-total").textContent = formatMoney(session.totalAmount);
@@ -748,7 +765,7 @@
 
   function bindCopyEvents() {
     document.addEventListener("click", function (event) {
-      var copy = event.target.closest(".copy");
+      var copy = event.target.closest(".copy, .iban-hero-btn");
       if (!copy) {
         return;
       }
@@ -759,8 +776,62 @@
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(value).catch(function () {});
       }
-      toast("Kopyalandı.");
+      if (copy.classList.contains("iban-hero-btn")) {
+        var copiedEl = copy.querySelector(".iban-hero-copied");
+        if (copiedEl) {
+          copiedEl.textContent = "Kopyalandı!";
+          setTimeout(function () { copiedEl.textContent = ""; }, 2000);
+        }
+      } else {
+        toast("Kopyalandı.");
+      }
     });
+  }
+
+  function bindProceedButton() {
+    var btn = $("#proceed-to-payment");
+    var target = $("#bank-panel");
+    if (!btn || !target) return;
+    btn.addEventListener("click", function () {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      var m = window.Motion;
+      if (!m || !m.animate) return;
+      setTimeout(function () {
+        m.animate(target, { boxShadow: ["0 0 0 0px #0f766e00", "0 0 0 4px #0f766e66", "0 0 0 0px #0f766e00"] }, { duration: 0.9, easing: "ease-out" });
+      }, 400);
+    });
+  }
+
+  function animateCheckoutEntrance() {
+    var m = window.Motion;
+    if (!m || !m.animate) return;
+
+    var pills = document.querySelectorAll(".trust-bar .pill");
+    if (pills.length) {
+      m.animate(Array.from(pills), { opacity: [0, 1], transform: ["translateY(-10px)", "translateY(0px)"] }, { delay: m.stagger(0.07), duration: 0.35, easing: [0.22, 1, 0.36, 1] });
+    }
+
+    var pageTitle = $(".page-title");
+    if (pageTitle) {
+      m.animate(pageTitle, { opacity: [0, 1], transform: ["translateY(14px)", "translateY(0px)"] }, { duration: 0.45, delay: 0.1, easing: [0.22, 1, 0.36, 1] });
+    }
+
+    var trustCard = $(".trust-card");
+    if (trustCard) {
+      m.animate(trustCard, { opacity: [0, 1], transform: ["translateY(10px)", "translateY(0px)"] }, { duration: 0.4, delay: 0.18, easing: [0.22, 1, 0.36, 1] });
+    }
+
+    var panels = document.querySelectorAll(".two-column .panel");
+    if (panels.length) {
+      m.animate(Array.from(panels), { opacity: [0, 1], transform: ["translateY(20px)", "translateY(0px)"] }, { delay: m.stagger(0.1, { start: 0.25 }), duration: 0.5, easing: [0.22, 1, 0.36, 1] });
+    }
+  }
+
+  function animateIbanHero() {
+    var m = window.Motion;
+    var hero = $("#iban-hero");
+    if (!m || !m.animate || !hero) return;
+    m.animate(hero, { opacity: [0, 1], transform: ["scale(0.97) translateY(8px)", "scale(1) translateY(0px)"] }, { duration: 0.45, easing: [0.22, 1, 0.36, 1] });
   }
 
   function bindReceiptForm() {
@@ -906,6 +977,7 @@
 
   function bindEvents() {
     bindCopyEvents();
+    bindProceedButton();
     bindReceiptForm();
     bindTrackForm();
     bindSupportForm();

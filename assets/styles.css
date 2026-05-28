@@ -796,6 +796,97 @@ input[type="file"] {
   font-size: 13px;
 }
 
+.proceed-to-payment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 18px;
+  width: 100%;
+}
+
+.proceed-to-payment svg {
+  flex: none;
+  height: 16px;
+  width: 16px;
+}
+
+.iban-hero {
+  background: linear-gradient(135deg, #0f4c35 0%, #0e7a5a 100%);
+  border-radius: var(--radius);
+  margin-bottom: 18px;
+  padding: 20px 22px;
+}
+
+.iban-hero-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.iban-hero-label {
+  color: rgba(255,255,255,0.7);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.iban-hero-btn {
+  align-items: center;
+  background: rgba(255,255,255,0.12);
+  border: 1.5px solid rgba(255,255,255,0.25);
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  gap: 10px;
+  padding: 12px 16px;
+  text-align: left;
+  transition: background 0.15s;
+  width: 100%;
+}
+
+.iban-hero-btn:hover,
+.iban-hero-btn:focus-visible {
+  background: rgba(255,255,255,0.2);
+  outline: none;
+}
+
+.iban-hero-number {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.iban-hero-icon {
+  color: rgba(255,255,255,0.75);
+  flex: none;
+  height: 18px;
+  width: 18px;
+}
+
+.iban-hero-copied {
+  color: #a7f3d0;
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 0;
+}
+
+.iban-hero-holder {
+  color: rgba(255,255,255,0.6);
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .iban-hero-number {
+    font-size: 15px;
+    letter-spacing: 0.03em;
+  }
+}
+
 .callout {
   background: var(--warning-soft);
   border: 1px solid #f7d9a8;
