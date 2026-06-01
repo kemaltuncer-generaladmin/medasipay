@@ -1054,14 +1054,6 @@
     return "";
   }
 
-  function updateCardBrandUi() {
-    var cardNumber = $("#card-number");
-    var brand = detectCardBrand(cardNumber ? cardNumber.value : "");
-    document.querySelectorAll(".accepted-card-brands img").forEach(function (logo) {
-      logo.classList.toggle("muted", Boolean(brand) && logo.alt !== brand);
-    });
-  }
-
   function passesLuhnCheck(value) {
     var sum = 0;
     var shouldDouble = false;
@@ -1211,7 +1203,6 @@
     if (!form || !submit) return false;
     syncCardExpiry();
     syncBillingState();
-    updateCardBrandUi();
     var valid = true;
     form.querySelectorAll("input:not([type='hidden']),select,textarea").forEach(function (input) {
       var error = cardFieldError(input);
@@ -1241,9 +1232,16 @@
       });
     }
     if (expiry) {
-      expiry.addEventListener("input", function () {
+      var normalizeExpiryInput = function () {
         expiry.value = formatCardExpiry(expiry.value);
         syncCardExpiry();
+      };
+      expiry.addEventListener("input", normalizeExpiryInput);
+      expiry.addEventListener("keyup", normalizeExpiryInput);
+      expiry.addEventListener("paste", function (event) {
+        event.preventDefault();
+        expiry.value = formatCardExpiry(event.clipboardData.getData("text"));
+        expiry.dispatchEvent(new Event("input", { bubbles: true }));
       });
     }
     cvv.addEventListener("input", function () {

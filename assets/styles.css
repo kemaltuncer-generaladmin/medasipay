@@ -597,45 +597,6 @@ a {
   padding: 0;
 }
 
-.accepted-card-brands {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  margin: 7px 0 2px;
-}
-
-.accepted-card-brands > span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.accepted-card-brands div {
-  align-items: center;
-  display: flex;
-  gap: 7px;
-}
-
-.accepted-card-brands img {
-  display: block;
-  height: 13px;
-  max-width: 36px;
-  object-fit: contain;
-  opacity: 1;
-  transition: opacity 120ms ease;
-  width: auto;
-}
-
-.accepted-card-brands img.muted {
-  opacity: 0.28;
-}
-
-.accepted-card-brands img[alt="TROY"] {
-  height: 15px;
-  max-width: 40px;
-}
-
 .card-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1486,12 +1447,6 @@ input[type="file"] {
 @media (max-width: 520px) {
   .brand {
     min-width: 0;
-  }
-
-  .accepted-card-brands {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
   }
 
   .page-title h1 {
