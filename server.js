@@ -768,7 +768,7 @@ async function initiateCardPayment(orderId, fields, request) {
     if (item.status !== "payment_pending") {
       throw httpError(409, "Bu sipariş için kart ödemesi başlatılamaz.");
     }
-    const merchantOrderId = item.cardPayment?.merchantOrderId || kuveytMerchantOrderId(item);
+    const merchantOrderId = nextKuveytMerchantOrderId(item);
     const amount = kuveytAmount(item);
     orderForBank = {
       ...item,
@@ -1143,6 +1143,11 @@ function normalizeCardType(value, cardNumber) {
 
 function kuveytMerchantOrderId(order) {
   return String(order.id || order.reference || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+}
+
+function nextKuveytMerchantOrderId(order) {
+  const base = kuveytMerchantOrderId(order).slice(0, 46) || randomCode(12).toLowerCase();
+  return `${base}-${Date.now().toString(36)}-${randomCode(6).toLowerCase()}`.slice(0, 64);
 }
 
 function kuveytAmount(order) {
