@@ -104,6 +104,12 @@ saklamaz. Kart üzerindeki ad, telefon ve fatura adresi gibi hassas olmayan
 alanlar sonraki ödemeleri kolaylaştırmak için yalnız kullanıcının tarayıcısında
 hatırlanır.
 
+Kuveyt Türk sandbox testi için `KUVEYT_POS_ENV=test` kullanılmalıdır. Bankanın
+sabit test fixture'ı `5188 9619 3919 2544`, son kullanım `06/25`, CVV `929` ve
+doğrulama kodu `123456` değerleriyle çalışır. Fixture üzerindeki tarih geçmiş
+olsa bile yalnız sandbox modunda kabul edilir; canlı kartların tarih kontrolü
+değişmez.
+
 Kuveyt Türk canlı Sanal POS IP beyaz listesi için ödeme sunucusunun dışarıya
 çıkan sabit IPv4 adresi kullanılmalıdır. Cloudflare DNS adresleri bu amaçla
 kullanılmaz.

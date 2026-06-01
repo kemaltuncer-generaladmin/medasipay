@@ -18,6 +18,8 @@
   var RECEIPT_ALLOWED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"];
   var RECEIPT_HELP_TEXT = "Dosya seçilmedi. PDF, PNG veya JPEG kabul edilir (en fazla 3 MB).";
   var CARD_PROFILE_STORAGE_KEY = "medasi-card-profile-v1";
+  var KUVEYT_SANDBOX_CARD_NUMBER = "5188961939192544";
+  var KUVEYT_SANDBOX_CARD_EXPIRY = "0625";
   var TURKEY_PROVINCES = [
     ["01", "Adana"], ["02", "Adıyaman"], ["03", "Afyonkarahisar"], ["04", "Ağrı"],
     ["05", "Amasya"], ["06", "Ankara"], ["07", "Antalya"], ["08", "Artvin"],
@@ -293,7 +295,8 @@
       paymentMethod: source.paymentMethod || "bank_transfer",
       paymentOptions: {
         bankTransfer: !source.paymentOptions || source.paymentOptions.bankTransfer !== false,
-        card: Boolean(source.paymentOptions && source.paymentOptions.card === true)
+        card: Boolean(source.paymentOptions && source.paymentOptions.card === true),
+        cardTestMode: Boolean(source.paymentOptions && source.paymentOptions.cardTestMode === true)
       },
       cardPayment: source.cardPayment || null,
       items: items,
@@ -720,6 +723,12 @@
       button.classList.toggle("active", active);
       button.setAttribute("aria-checked", active ? "true" : "false");
     });
+    var proceedLabel = $("#proceed-to-payment-label");
+    if (proceedLabel) {
+      proceedLabel.textContent = currentPaymentMethod === "card"
+        ? "Kart bilgilerini gir"
+        : "IBAN bilgilerini görüntüle";
+    }
 
     var help = $("#payment-help");
     if (help && currentSession && currentSession.status === "payment_pending" && !isExpiredSession(currentSession)) {
@@ -752,6 +761,16 @@
     updateCardFormValidity(false);
     var disabledNote = $("#card-disabled-note");
     if (disabledNote) disabledNote.hidden = canUseCard;
+    var testNote = $("#card-test-note");
+    if (testNote) {
+      testNote.hidden = !(session.paymentOptions && session.paymentOptions.cardTestMode);
+    }
+    var cardStatus = $("#card-status");
+    if (cardStatus) {
+      cardStatus.textContent = session.paymentOptions && session.paymentOptions.cardTestMode
+        ? "Sandbox / 3D Secure"
+        : "3D Secure";
+    }
   }
 
   function renderCardResult(session) {
@@ -1028,7 +1047,21 @@
 
   function formatCardExpiry(value) {
     var digits = digitsOnly(value).slice(0, 4);
-    return digits.length >= 2 ? digits.slice(0, 2) + "/" + digits.slice(2) : digits;
+    return digits.length < 2 ? digits : digits.slice(0, 2) + "/" + digits.slice(2);
+  }
+
+  function normalizeCardExpiryInput(input) {
+    var caret = input.selectionStart;
+    var digitCaret = digitsOnly(input.value.slice(0, caret === null ? input.value.length : caret)).length;
+    input.value = formatCardExpiry(input.value);
+    if (typeof input.setSelectionRange === "function") {
+      var nextCaret = digitCaret + (digitCaret >= 2 ? 1 : 0);
+      input.setSelectionRange(
+        Math.min(nextCaret, input.value.length),
+        Math.min(nextCaret, input.value.length)
+      );
+    }
+    syncCardExpiry();
   }
 
   function formatTurkeyPhone(value) {
@@ -1040,8 +1073,10 @@
   function syncCardExpiry() {
     var expiry = $("#card-expiry");
     var digits = digitsOnly(expiry ? expiry.value : "");
-    $("#card-expiry-month").value = digits.slice(0, 2);
-    $("#card-expiry-year").value = digits.slice(2, 4);
+    var month = $("#card-expiry-month");
+    var year = $("#card-expiry-year");
+    if (month) month.value = digits.slice(0, 2);
+    if (year) year.value = digits.slice(2, 4);
   }
 
   function detectCardBrand(value) {
@@ -1077,6 +1112,29 @@
     return expiryMonth >= 1 && expiryMonth <= 12 &&
       expiryYear >= now.getFullYear() &&
       (expiryYear > now.getFullYear() || expiryMonth >= now.getMonth() + 1);
+  }
+
+  function isKuveytSandboxCardExpiry(cardNumber, month, year) {
+    return Boolean(
+      currentSession &&
+      currentSession.paymentOptions &&
+      currentSession.paymentOptions.cardTestMode &&
+      digitsOnly(cardNumber) === KUVEYT_SANDBOX_CARD_NUMBER &&
+      digitsOnly(month + year) === KUVEYT_SANDBOX_CARD_EXPIRY
+    );
+  }
+
+  function isAcceptedCardExpiry(cardNumber, month, year) {
+    return isFutureCardExpiry(month, year) ||
+      isKuveytSandboxCardExpiry(cardNumber, month, year);
+  }
+
+  function updateCardBrand() {
+    var badge = $("#card-brand");
+    if (!badge) return;
+    var brand = detectCardBrand($("#card-number").value);
+    badge.textContent = brand || "TROY / Mastercard / VISA";
+    badge.classList.toggle("recognized", Boolean(brand));
   }
 
   function syncBillingState() {
@@ -1155,7 +1213,9 @@
     }
     if (input.id === "card-expiry") {
       if (!/^(0[1-9]|1[0-2])\d{2}$/.test(digits)) return "Son kullanma tarihini AA/YY olarak girin.";
-      return isFutureCardExpiry(digits.slice(0, 2), digits.slice(2)) ? "" : "Son kullanma tarihi geçmiş.";
+      return isAcceptedCardExpiry($("#card-number").value, digits.slice(0, 2), digits.slice(2))
+        ? ""
+        : "Son kullanma tarihi geçmiş.";
     }
     if (input.id === "card-cvv") {
       return /^\d{3}$/.test(digits) ? "" : "CVV / CVC üç haneli olmalı.";
@@ -1229,18 +1289,16 @@
     if (cardNumber) {
       cardNumber.addEventListener("input", function () {
         cardNumber.value = formatCardNumber(cardNumber.value);
+        updateCardBrand();
       });
     }
     if (expiry) {
-      var normalizeExpiryInput = function () {
-        expiry.value = formatCardExpiry(expiry.value);
-        syncCardExpiry();
-      };
-      expiry.addEventListener("input", normalizeExpiryInput);
-      expiry.addEventListener("keyup", normalizeExpiryInput);
+      expiry.addEventListener("input", function () {
+        normalizeCardExpiryInput(expiry);
+      });
       expiry.addEventListener("paste", function (event) {
         event.preventDefault();
-        expiry.value = formatCardExpiry(event.clipboardData.getData("text"));
+        expiry.value = event.clipboardData.getData("text");
         expiry.dispatchEvent(new Event("input", { bubbles: true }));
       });
     }
@@ -1290,6 +1348,7 @@
         updateCardFormValidity(false);
       });
     });
+    updateCardBrand();
     updateCardFormValidity(false);
 
     form.addEventListener("submit", function (event) {

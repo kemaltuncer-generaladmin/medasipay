@@ -9,9 +9,9 @@
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>MedAsi Ödeme — Güvenli sipariş ekranı</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="assets/styles.css?v=checkout-6">
+    <link rel="stylesheet" href="assets/styles.css?v=checkout-7">
     <script src="https://cdn.jsdelivr.net/npm/motion@11.11.13/dist/motion.js"></script>
-    <script src="assets/app.js?v=checkout-6" defer></script>
+    <script src="assets/app.js?v=checkout-7" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">İçeriğe geç</a>
@@ -98,6 +98,21 @@
             </div>
           </div>
 
+          <ol class="checkout-steps" aria-label="Ödeme adımları">
+            <li class="done">
+              <span>1</span>
+              <div><strong>Sipariş</strong><small>Ödeme özeti hazır</small></div>
+            </li>
+            <li class="active">
+              <span>2</span>
+              <div><strong>Ödeme bilgileri</strong><small>Yönteminizi seçin</small></div>
+            </li>
+            <li>
+              <span>3</span>
+              <div><strong>Güvenli doğrulama</strong><small>Bankanızda tamamlayın</small></div>
+            </li>
+          </ol>
+
           <div class="two-column">
             <section class="panel emphasis">
               <div class="section-title">
@@ -155,7 +170,7 @@
               </div>
 
               <button type="button" class="button primary proceed-to-payment" id="proceed-to-payment">
-                Seçilen yöntemle devam et
+                <span id="proceed-to-payment-label">IBAN bilgilerini görüntüle</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
               </button>
             </section>
@@ -229,7 +244,7 @@
                 </label>
               </form>
             </section>
-            <section class="panel method-panel" id="card-panel" hidden>
+            <section class="panel method-panel card-payment-panel" id="card-panel" hidden>
               <div class="section-title">
                 <div class="section-head">
                   <span class="label">Kartla ödeme</span>
@@ -254,6 +269,14 @@
                 </div>
               </div>
 
+              <div class="callout sandbox" id="card-test-note" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="16" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 15 2 2 4-4"/></svg>
+                <div>
+                  <strong>Sandbox kart testi etkin.</strong>
+                  <span>Kuveyt Türk test kartının sabit 06/25 tarihi bu ortamda kabul edilir.</span>
+                </div>
+              </div>
+
               <form id="card-form" class="card-form" method="post" novalidate>
                 <input id="card-token" name="token" type="hidden">
                 <input name="billAddrCountry" type="hidden" value="792">
@@ -261,9 +284,17 @@
 
                 <fieldset class="card-form-section">
                   <legend>Kart bilgileri</legend>
+                  <div class="accepted-cards" aria-label="Desteklenen kartlar">
+                    <span>TROY</span>
+                    <span>Mastercard</span>
+                    <span>VISA</span>
+                  </div>
                   <label class="field" for="card-number">
                     <span>Kart numarası</span>
-                    <input id="card-number" name="cardNumber" type="text" inputmode="numeric" autocomplete="cc-number" maxlength="23" placeholder="0000 0000 0000 0000" required>
+                    <div class="card-number-input">
+                      <input id="card-number" name="cardNumber" type="text" inputmode="numeric" autocomplete="cc-number" maxlength="23" placeholder="0000 0000 0000 0000" required>
+                      <strong id="card-brand">TROY / Mastercard / VISA</strong>
+                    </div>
                   </label>
 
                   <label class="field" for="card-holder-name">
@@ -277,10 +308,12 @@
                     <label class="field" for="card-expiry">
                       <span>Son kullanma tarihi</span>
                       <input id="card-expiry" type="text" inputmode="numeric" autocomplete="cc-exp" maxlength="5" placeholder="AA/YY" required>
+                      <small class="field-hint">Ayı yazdıktan sonra / otomatik eklenir.</small>
                     </label>
                     <label class="field" for="card-cvv">
                       <span>CVV / CVC</span>
                       <input id="card-cvv" name="cardCVV2" type="password" inputmode="numeric" autocomplete="cc-csc" maxlength="3" pattern="[0-9]{3}" placeholder="•••" required>
+                      <small class="field-hint">Kartınızın arkasındaki 3 hane.</small>
                     </label>
                   </div>
                 </fieldset>
@@ -326,6 +359,12 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
                   3D Secure ile öde
                 </button>
+
+                <div class="payment-assurances" aria-label="Ödeme güvenliği">
+                  <span>SSL şifreli bağlantı</span>
+                  <span>3D Secure doğrulama</span>
+                  <span>Kart bilgileri kaydedilmez</span>
+                </div>
 
                 <p class="helper">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>

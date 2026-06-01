@@ -102,7 +102,8 @@ render eder:
   "paymentMethod": "bank_transfer",
   "paymentOptions": {
     "bankTransfer": true,
-    "card": true
+    "card": true,
+    "cardTestMode": false
   },
   "cardPayment": null
 }
@@ -150,6 +151,10 @@ Alanlar:
 - `cardHolderName`, `cardNumber`, `cardExpireDateMonth`, `cardExpireDateYear`, `cardCVV2`
 - `cardEmail`, `cardPhoneCountry`, `cardPhone`
 - `billAddrCity`, `billAddrLine1`, `billAddrPostCode`
+
+`paymentOptions.cardTestMode=true` yalnız Kuveyt Türk sandbox bağlantısında
+döner. Sandbox ortamında bankanın sabit test kartı üzerindeki geçmiş son
+kullanım tarihi kabul edilir; canlı kartların tarih kontrolü değişmez.
 
 Banka `OkUrl` dönüşünde `AuthenticationResponse` içinde `ResponseCode=00` ve
 `MD` gönderirse servis `ThreeDModelProvisionGate` ile provizyon alır. Provizyon

@@ -31,6 +31,12 @@ const kuveytPosEndpoints = {
   productionProvisionGate:
     "https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home/ThreeDModelProvisionGate",
 };
+const kuveytSandboxCardFixture = {
+  cardNumber: "5188961939192544",
+  month: "06",
+  year: "25",
+  cvv: "929",
+};
 const defaultPaymentWebhookUrls = {
   qlinik: "https://qlinik.medasi.com.tr/functions/v1/qlinik",
   praticase: "https://qlinik.medasi.com.tr/functions/v1/praticase-storekit-verify",
@@ -624,6 +630,7 @@ function publicOrder(order) {
     paymentOptions: {
       bankTransfer: true,
       card: kuveytPosConfigured(),
+      cardTestMode: kuveytPosConfigured() && kuveytPosMode() === "test",
     },
     cardPayment: publicCardPayment(order.cardPayment),
     receipt: order.receipt
@@ -1007,9 +1014,9 @@ function normalizeCardForm(fields) {
 
   const month = normalizeExpiryMonth(fields.cardExpireDateMonth);
   const year = normalizeExpiryYear(fields.cardExpireDateYear);
-  assertFutureCardExpiry(month, year);
   const cvv = stringValue(fields.cardCVV2).replace(/\D/g, "");
   if (!/^\d{3}$/.test(cvv)) throw httpError(400, "CVV / CVC geçersiz.");
+  assertFutureCardExpiry(month, year, cardNumber, cvv);
 
   const countryCode = "90";
   let subscriber = stringValue(fields.cardPhone).replace(/\D/g, "");
@@ -1069,7 +1076,10 @@ function normalizeExpiryYear(value) {
   return year;
 }
 
-function assertFutureCardExpiry(month, year) {
+function assertFutureCardExpiry(month, year, cardNumber, cvv) {
+  // Kuveyt Türk keeps this fixed card credential active in its sandbox even
+  // after the printed expiry date. Production cards still use the strict check.
+  if (isKuveytSandboxCardFixture(cardNumber, month, year, cvv)) return;
   const now = new Date();
   const expiryYear = 2000 + Number(year);
   if (
@@ -1078,6 +1088,14 @@ function assertFutureCardExpiry(month, year) {
   ) {
     throw httpError(400, "Kartın son kullanma tarihi geçmiş.");
   }
+}
+
+function isKuveytSandboxCardFixture(cardNumber, month, year, cvv) {
+  return kuveytPosMode() === "test" &&
+    cardNumber === kuveytSandboxCardFixture.cardNumber &&
+    month === kuveytSandboxCardFixture.month &&
+    year === kuveytSandboxCardFixture.year &&
+    cvv === kuveytSandboxCardFixture.cvv;
 }
 
 function normalizeCardCustomerEmail(value) {

@@ -578,6 +578,30 @@ a {
   margin-top: 10px;
 }
 
+.card-payment-panel {
+  box-shadow: var(--shadow);
+}
+
+.accepted-cards {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.accepted-cards span {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  padding: 5px 6px;
+}
+
 .card-form-section {
   border: 0;
   margin: 0;
@@ -599,6 +623,58 @@ a {
 
 .card-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.card-number-input {
+  position: relative;
+}
+
+.card-number-input input {
+  padding-right: 142px;
+}
+
+.card-number-input strong {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  max-width: 126px;
+  overflow: hidden;
+  position: absolute;
+  right: 12px;
+  text-overflow: ellipsis;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.card-number-input strong.recognized {
+  color: var(--primary);
+}
+
+.field-hint {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 5px;
+}
+
+.payment-assurances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.payment-assurances span {
+  background: var(--panel-soft);
+  border: 1px solid var(--soft-line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 8px;
 }
 
 .phone-grid {
@@ -922,6 +998,75 @@ input[type="file"] {
   font-size: 13px;
 }
 
+.checkout-steps {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+}
+
+.checkout-steps li {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.checkout-steps li + li {
+  border-left: 1px solid var(--soft-line);
+}
+
+.checkout-steps li > span {
+  align-items: center;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  flex: none;
+  font-size: 12px;
+  font-weight: 800;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.checkout-steps strong,
+.checkout-steps small {
+  display: block;
+}
+
+.checkout-steps strong {
+  font-size: 13px;
+}
+
+.checkout-steps small {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+.checkout-steps .done > span {
+  background: var(--success-soft);
+  border-color: #b8e3cc;
+  color: var(--success);
+}
+
+.checkout-steps .active {
+  background: #f0fdfa;
+}
+
+.checkout-steps .active > span {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
 .proceed-to-payment {
   display: flex;
   align-items: center;
@@ -1034,6 +1179,13 @@ input[type="file"] {
   background: #eff6ff;
   border-color: #c8dafd;
   color: #1d4ed8;
+}
+
+.callout.sandbox {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+  margin-bottom: 14px;
 }
 
 .callout svg {
@@ -1400,6 +1552,7 @@ input[type="file"] {
 
   .two-column,
   .two-column.narrow-right,
+  .checkout-steps,
   .payment-method-selector,
   .login,
   .metrics,
@@ -1409,6 +1562,11 @@ input[type="file"] {
   .billing-grid,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .checkout-steps li + li {
+    border-left: 0;
+    border-top: 1px solid var(--soft-line);
   }
 
   .info-list div {
@@ -1455,6 +1613,14 @@ input[type="file"] {
 
   .panel {
     padding: 16px;
+  }
+
+  .card-number-input input {
+    padding-right: 12px;
+  }
+
+  .card-number-input strong {
+    display: none;
   }
 
   .state-panel {
