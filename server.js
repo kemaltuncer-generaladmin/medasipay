@@ -834,7 +834,7 @@ async function initiateCardPayment(orderId, fields, request) {
 }
 
 async function handleKuveytPosCallback(request, response, successRoute) {
-  const fields = await readFormUrlEncoded(request, maxKuveytCallbackBytes);
+  const fields = await readKuveytCallbackForm(request, maxKuveytCallbackBytes);
   const xml = decodeAuthenticationResponse(fields.AuthenticationResponse);
   const payload = parseKuveytResponse(xml);
   const merchantOrderId = payload.MerchantOrderId;
@@ -854,8 +854,9 @@ async function handleKuveytPosCallback(request, response, successRoute) {
     return;
   }
 
-  const failureMessage = payload.ResponseMessage ||
-    "Kart doğrulaması tamamlanamadı. Dilerseniz tekrar deneyebilir veya IBAN ile devam edebilirsiniz.";
+  const failureMessage = userCardFailureMessage(payload.ResponseMessage,
+    "Kart doğrulaması tamamlanamadı. Dilerseniz tekrar deneyebilir veya IBAN ile devam edebilirsiniz.",
+  );
 
   if (!successRoute || payload.ResponseCode !== "00" || !payload.MD) {
     await updateCardPaymentFailure(order.id, "authentication_failed", payload, failureMessage);
@@ -883,16 +884,22 @@ async function handleKuveytPosCallback(request, response, successRoute) {
   try {
     provision = await provisionCardPayment(order, payload, config);
   } catch (error) {
-    const message = error.statusCode === 502
-      ? "Kart doğrulandı ancak provizyon isteği tamamlanamadı."
-      : error.message;
+    const message = userCardFailureMessage(
+      error.message,
+      error.statusCode === 502
+        ? "Kart doğrulandı, ancak bankadan ödeme onayı alınamadı. Lütfen birkaç dakika sonra tekrar deneyin."
+        : "Kart doğrulandı, ancak ödeme tamamlanamadı. Lütfen tekrar deneyin veya destek ekibimizle iletişime geçin.",
+    );
     await updateCardPaymentFailure(order.id, "provision_failed", payload, message);
     redirect(response, checkoutResultUrl(order, "failed", message));
     return;
   }
 
   if (!provision.ok) {
-    const message = provision.payload.ResponseMessage || "Kart provizyonu onaylanmadı.";
+    const message = userCardFailureMessage(
+      provision.payload.ResponseMessage,
+      "Banka ödeme onayı vermedi. Kartınızdan tahsilat görünmüyorsa tekrar deneyebilir veya IBAN ile devam edebilirsiniz.",
+    );
     await updateCardPaymentFailure(order.id, "provision_declined", provision.payload, message);
     redirect(response, checkoutResultUrl(order, "failed", message));
     return;
@@ -1391,6 +1398,48 @@ function checkoutResultUrl(order, result, message) {
   return url.toString();
 }
 
+function userCardFailureMessage(bankMessage, fallback) {
+  const raw = stringValue(bankMessage).trim();
+  if (!raw) return fallback;
+  const normalized = raw
+    .replace(/\+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("tr-TR");
+
+  if (normalized.includes("md") && (
+    normalized.includes("uyumsuz") ||
+    normalized.includes("hatal") ||
+    normalized.includes("geçersiz") ||
+    normalized.includes("gecersiz")
+  )) {
+    return "3D Secure doğrulaması bankadan geldi, ancak ödeme onayı tamamlanamadı. Kartınızdan tahsilat görünmüyorsa tekrar deneyebilir veya IBAN ile devam edebilirsiniz.";
+  }
+
+  if (normalized.includes("hash") || normalized.includes("imza")) {
+    return "Banka dönüşü güvenlik kontrolünden geçemedi. Kartınızdan tahsilat görünmüyorsa tekrar deneyebilir veya destek ekibimizle iletişime geçebilirsiniz.";
+  }
+
+  if (
+    normalized.includes("red") ||
+    normalized.includes("decline") ||
+    normalized.includes("limit") ||
+    normalized.includes("yetersiz")
+  ) {
+    return "Banka bu kartlı ödemeye onay vermedi. Kart limitinizi veya banka kısıtlarını kontrol edip tekrar deneyebilirsiniz.";
+  }
+
+  if (
+    normalized.includes("timeout") ||
+    normalized.includes("zaman") ||
+    normalized.includes("ulaş") ||
+    normalized.includes("ulas")
+  ) {
+    return "Banka yanıtı zamanında alınamadı. Kartınızdan tahsilat görünmüyorsa birkaç dakika sonra tekrar deneyebilirsiniz.";
+  }
+
+  return raw.length > 140 ? fallback : raw;
+}
+
 function renderCardResultPage(title, message) {
   return `<!doctype html>
 <html lang="tr">
@@ -1873,6 +1922,39 @@ async function readFormUrlEncoded(request, limit) {
   const fields = {};
   for (const [key, value] of params.entries()) fields[key] = value;
   return fields;
+}
+
+async function readKuveytCallbackForm(request, limit) {
+  const body = await readBody(request, limit || maxJsonBytes);
+  if (!body.length) return {};
+  return parseFormUrlEncodedPreservingPlus(body.toString("utf8"), [
+    "AuthenticationResponse",
+  ]);
+}
+
+function parseFormUrlEncodedPreservingPlus(raw, preservePlusKeys) {
+  const preserve = new Set(preservePlusKeys || []);
+  const fields = {};
+  String(raw || "").split("&").forEach((entry) => {
+    if (!entry) return;
+    const separator = entry.indexOf("=");
+    const rawKey = separator >= 0 ? entry.slice(0, separator) : entry;
+    const rawValue = separator >= 0 ? entry.slice(separator + 1) : "";
+    const key = decodeFormComponent(rawKey, false);
+    fields[key] = decodeFormComponent(rawValue, preserve.has(key));
+  });
+  return fields;
+}
+
+function decodeFormComponent(value, preservePlus) {
+  const normalized = preservePlus
+    ? String(value || "")
+    : String(value || "").replace(/\+/g, " ");
+  try {
+    return decodeURIComponent(normalized);
+  } catch {
+    return normalized;
+  }
 }
 
 async function readMultipart(request) {
