@@ -578,8 +578,47 @@ a {
   margin-top: 4px;
 }
 
+.accepted-card-brands {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.accepted-card-brands > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.accepted-card-brands div {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.accepted-card-brands img {
+  display: block;
+  height: 22px;
+  max-width: 58px;
+  object-fit: contain;
+  opacity: 1;
+  transition: opacity 120ms ease;
+  width: auto;
+}
+
+.accepted-card-brands img.muted {
+  opacity: 0.28;
+}
+
+.accepted-card-brands img[alt="TROY"] {
+  height: 25px;
+  max-width: 64px;
+}
+
 .card-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .phone-grid {
@@ -634,6 +673,31 @@ textarea:focus {
   border-color: var(--primary);
   box-shadow: var(--ring);
   outline: none;
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
+input[aria-invalid="true"]:focus,
+select[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+}
+
+input[readonly] {
+  background: var(--panel-soft);
+  color: var(--text-soft);
+}
+
+.field-error {
+  color: #b91c1c;
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 5px;
 }
 
 input[type="file"] {
@@ -1398,6 +1462,12 @@ input[type="file"] {
 @media (max-width: 520px) {
   .brand {
     min-width: 0;
+  }
+
+  .accepted-card-brands {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .page-title h1 {

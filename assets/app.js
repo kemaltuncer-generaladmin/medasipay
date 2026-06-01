@@ -17,6 +17,30 @@
   var RECEIPT_ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg"];
   var RECEIPT_ALLOWED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"];
   var RECEIPT_HELP_TEXT = "Dosya seçilmedi. PDF, PNG veya JPEG kabul edilir (en fazla 3 MB).";
+  var CARD_PROFILE_STORAGE_KEY = "medasi-card-profile-v1";
+  var TURKEY_PROVINCES = [
+    ["01", "Adana"], ["02", "Adıyaman"], ["03", "Afyonkarahisar"], ["04", "Ağrı"],
+    ["05", "Amasya"], ["06", "Ankara"], ["07", "Antalya"], ["08", "Artvin"],
+    ["09", "Aydın"], ["10", "Balıkesir"], ["11", "Bilecik"], ["12", "Bingöl"],
+    ["13", "Bitlis"], ["14", "Bolu"], ["15", "Burdur"], ["16", "Bursa"],
+    ["17", "Çanakkale"], ["18", "Çankırı"], ["19", "Çorum"], ["20", "Denizli"],
+    ["21", "Diyarbakır"], ["22", "Edirne"], ["23", "Elazığ"], ["24", "Erzincan"],
+    ["25", "Erzurum"], ["26", "Eskişehir"], ["27", "Gaziantep"], ["28", "Giresun"],
+    ["29", "Gümüşhane"], ["30", "Hakkari"], ["31", "Hatay"], ["32", "Isparta"],
+    ["33", "Mersin"], ["34", "İstanbul"], ["35", "İzmir"], ["36", "Kars"],
+    ["37", "Kastamonu"], ["38", "Kayseri"], ["39", "Kırklareli"], ["40", "Kırşehir"],
+    ["41", "Kocaeli"], ["42", "Konya"], ["43", "Kütahya"], ["44", "Malatya"],
+    ["45", "Manisa"], ["46", "Kahramanmaraş"], ["47", "Mardin"], ["48", "Muğla"],
+    ["49", "Muş"], ["50", "Nevşehir"], ["51", "Niğde"], ["52", "Ordu"],
+    ["53", "Rize"], ["54", "Sakarya"], ["55", "Samsun"], ["56", "Siirt"],
+    ["57", "Sinop"], ["58", "Sivas"], ["59", "Tekirdağ"], ["60", "Tokat"],
+    ["61", "Trabzon"], ["62", "Tunceli"], ["63", "Şanlıurfa"], ["64", "Uşak"],
+    ["65", "Van"], ["66", "Yozgat"], ["67", "Zonguldak"], ["68", "Aksaray"],
+    ["69", "Bayburt"], ["70", "Karaman"], ["71", "Kırıkkale"], ["72", "Batman"],
+    ["73", "Şırnak"], ["74", "Bartın"], ["75", "Ardahan"], ["76", "Iğdır"],
+    ["77", "Yalova"], ["78", "Karabük"], ["79", "Kilis"], ["80", "Osmaniye"],
+    ["81", "Düzce"]
+  ];
 
   var money = new Intl.NumberFormat("tr-TR", {
     style: "currency",
@@ -721,9 +745,11 @@
     form.action = API_BASE + "/api/orders/" + encodeURIComponent(session.orderId || "") + "/card/initiate";
     $("#card-token").value = session.token || "";
     $("#card-email").value = session.customerEmail || "";
-    form.querySelectorAll("input,button,select,textarea").forEach(function (el) {
+    form.dataset.sessionEnabled = canSubmit ? "true" : "false";
+    form.querySelectorAll("input,select,textarea").forEach(function (el) {
       el.disabled = el.type === "hidden" ? false : !canSubmit;
     });
+    updateCardFormValidity(false);
     var disabledNote = $("#card-disabled-note");
     if (disabledNote) disabledNote.hidden = canUseCard;
   }
@@ -765,9 +791,11 @@
       var canCardSubmit = session.paymentOptions && session.paymentOptions.card !== false &&
         session.status === "payment_pending" &&
         !isExpiredSession(session);
-      cardForm.querySelectorAll("input,button,select,textarea").forEach(function (el) {
+      cardForm.dataset.sessionEnabled = canCardSubmit ? "true" : "false";
+      cardForm.querySelectorAll("input,select,textarea").forEach(function (el) {
         el.disabled = el.type === "hidden" ? false : !canCardSubmit;
       });
+      updateCardFormValidity(false);
     }
 
     if (!help) return;
@@ -998,26 +1026,258 @@
     return digitsOnly(value).slice(0, 19).replace(/(.{4})/g, "$1 ").trim();
   }
 
+  function formatCardExpiry(value) {
+    var digits = digitsOnly(value).slice(0, 4);
+    return digits.length > 2 ? digits.slice(0, 2) + "/" + digits.slice(2) : digits;
+  }
+
+  function formatTurkeyPhone(value) {
+    var digits = digitsOnly(value);
+    if (digits.indexOf("90") === 0) digits = digits.slice(2);
+    return digits.replace(/^0+/, "").slice(0, 10);
+  }
+
+  function syncCardExpiry() {
+    var expiry = $("#card-expiry");
+    var digits = digitsOnly(expiry ? expiry.value : "");
+    $("#card-expiry-month").value = digits.slice(0, 2);
+    $("#card-expiry-year").value = digits.slice(2, 4);
+  }
+
+  function detectCardBrand(value) {
+    var digits = digitsOnly(value);
+    if (/^9792/.test(digits)) return "TROY";
+    if (/^4/.test(digits)) return "VISA";
+    if (/^(5[1-5]\d{2}|2(?:2(?:2[1-9]|[3-9]\d)|[3-6]\d{2}|7(?:[01]\d|20)))/.test(digits)) {
+      return "Mastercard";
+    }
+    return "";
+  }
+
+  function updateCardBrandUi() {
+    var cardNumber = $("#card-number");
+    var brand = detectCardBrand(cardNumber ? cardNumber.value : "");
+    document.querySelectorAll(".accepted-card-brands img").forEach(function (logo) {
+      logo.classList.toggle("muted", Boolean(brand) && logo.alt !== brand);
+    });
+  }
+
+  function passesLuhnCheck(value) {
+    var sum = 0;
+    var shouldDouble = false;
+    for (var index = value.length - 1; index >= 0; index -= 1) {
+      var digit = Number(value[index]);
+      if (shouldDouble) {
+        digit *= 2;
+        if (digit > 9) digit -= 9;
+      }
+      sum += digit;
+      shouldDouble = !shouldDouble;
+    }
+    return sum % 10 === 0;
+  }
+
+  function isFutureCardExpiry(month, year) {
+    var expiryMonth = Number(digitsOnly(month));
+    var yearDigits = digitsOnly(year);
+    var expiryYear = Number(yearDigits.length === 4 ? yearDigits : "20" + yearDigits);
+    var now = new Date();
+    return expiryMonth >= 1 && expiryMonth <= 12 &&
+      expiryYear >= now.getFullYear() &&
+      (expiryYear > now.getFullYear() || expiryMonth >= now.getMonth() + 1);
+  }
+
+  function syncBillingState() {
+    var city = $("#billing-city");
+    var state = $("#billing-state");
+    if (!city || !state) return;
+    var option = city.options[city.selectedIndex];
+    state.value = option ? option.getAttribute("data-code") || "" : "";
+  }
+
+  function configureProvinceSelect() {
+    var city = $("#billing-city");
+    if (!city || city.options.length > 1) return;
+    TURKEY_PROVINCES.forEach(function (province) {
+      var option = document.createElement("option");
+      option.value = province[1];
+      option.textContent = province[1];
+      option.setAttribute("data-code", province[0]);
+      city.appendChild(option);
+    });
+    city.addEventListener("change", syncBillingState);
+  }
+
+  function readCardProfile() {
+    try {
+      return JSON.parse(window.localStorage.getItem(CARD_PROFILE_STORAGE_KEY) || "{}");
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function restoreCardProfile() {
+    var profile = readCardProfile();
+    var values = {
+      "#card-holder-name": profile.cardHolderName,
+      "#card-phone": profile.cardPhone,
+      "#billing-city": profile.billAddrCity,
+      "#billing-address": profile.billAddrLine1,
+      "#billing-postcode": profile.billAddrPostCode
+    };
+    Object.keys(values).forEach(function (selector) {
+      var input = $(selector);
+      if (input && values[selector]) input.value = values[selector];
+    });
+    syncBillingState();
+  }
+
+  function saveCardProfile() {
+    try {
+      window.localStorage.setItem(CARD_PROFILE_STORAGE_KEY, JSON.stringify({
+        cardHolderName: $("#card-holder-name").value.trim(),
+        cardPhone: digitsOnly($("#card-phone").value),
+        billAddrCity: $("#billing-city").value,
+        billAddrLine1: $("#billing-address").value.trim(),
+        billAddrPostCode: digitsOnly($("#billing-postcode").value)
+      }));
+    } catch (error) {
+      // The payment can continue when browser storage is unavailable.
+    }
+  }
+
+  function cardFieldError(input) {
+    if (!input || input.disabled) return "";
+    var value = input.value.trim();
+    var digits = digitsOnly(value);
+    if (!value) return "Bu alan zorunlu.";
+    if (input.id === "card-holder-name") {
+      return /^[\p{L} .'-]{2,45}$/u.test(value) && value.replace(/[^\p{L}]/gu, "").length >= 2
+        ? ""
+        : "Kart üzerindeki ad soyadı girin.";
+    }
+    if (input.id === "card-number") {
+      if (digits.length < 13 || digits.length > 19) return "Kart numarası 13-19 haneli olmalı.";
+      if (!detectCardBrand(digits)) return "Yalnız TROY, Mastercard veya Visa kart kullanabilirsiniz.";
+      return passesLuhnCheck(digits) ? "" : "Kart numarasını kontrol edin.";
+    }
+    if (input.id === "card-expiry") {
+      if (!/^(0[1-9]|1[0-2])\d{2}$/.test(digits)) return "Son kullanma tarihini AA/YY olarak girin.";
+      return isFutureCardExpiry(digits.slice(0, 2), digits.slice(2)) ? "" : "Son kullanma tarihi geçmiş.";
+    }
+    if (input.id === "card-cvv") {
+      return /^\d{3}$/.test(digits) ? "" : "CVV / CVC üç haneli olmalı.";
+    }
+    if (input.id === "card-email") {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? "" : "Sipariş e-postası geçersiz.";
+    }
+    if (input.id === "card-phone") {
+      return /^5\d{9}$/.test(digits) ? "" : "5 ile başlayan 10 haneli cep telefonu girin.";
+    }
+    if (input.id === "billing-city") {
+      return $("#billing-state").value ? "" : "Fatura ilini seçin.";
+    }
+    if (input.id === "billing-address") {
+      return value.length >= 10 && /\p{L}/u.test(value) ? "" : "Açık adres en az 10 karakter olmalı.";
+    }
+    if (input.id === "billing-postcode") {
+      var state = $("#billing-state").value;
+      return state && new RegExp("^" + state + "\\d{3}$").test(digits)
+        ? ""
+        : "Posta kodu seçilen il ile eşleşmeli.";
+    }
+    return "";
+  }
+
+  function renderCardFieldError(input, error, forceErrors) {
+    if (!input) return;
+    var show = Boolean(error) && (forceErrors || input.dataset.touched === "true");
+    input.setAttribute("aria-invalid", show ? "true" : "false");
+    var field = input.closest(".field");
+    if (!field) return;
+    var message = field.querySelector(".field-error");
+    if (!message) {
+      message = document.createElement("small");
+      message.className = "field-error";
+      field.appendChild(message);
+    }
+    message.textContent = show ? error : "";
+    message.hidden = !show;
+  }
+
+  function updateCardFormValidity(forceErrors) {
+    var form = $("#card-form");
+    var submit = $("#card-submit");
+    if (!form || !submit) return false;
+    syncCardExpiry();
+    syncBillingState();
+    updateCardBrandUi();
+    var valid = true;
+    form.querySelectorAll("input:not([type='hidden']),select,textarea").forEach(function (input) {
+      var error = cardFieldError(input);
+      if (error) valid = false;
+      renderCardFieldError(input, error, forceErrors);
+    });
+    submit.disabled = form.dataset.sessionEnabled !== "true" || !valid;
+    return valid;
+  }
+
   function bindCardForm() {
     var form = $("#card-form");
     if (!form) return;
     var cardNumber = $("#card-number");
-    var month = $("#card-expiry-month");
-    var year = $("#card-expiry-year");
+    var expiry = $("#card-expiry");
     var cvv = $("#card-cvv");
     var submit = $("#card-submit");
+    var phone = $("#card-phone");
+    var postcode = $("#billing-postcode");
+
+    configureProvinceSelect();
+    restoreCardProfile();
 
     if (cardNumber) {
       cardNumber.addEventListener("input", function () {
         cardNumber.value = formatCardNumber(cardNumber.value);
       });
     }
-    [month, year, cvv, $("#card-phone-country")].forEach(function (input) {
-      if (!input) return;
+    if (expiry) {
+      expiry.addEventListener("input", function () {
+        expiry.value = formatCardExpiry(expiry.value);
+        syncCardExpiry();
+      });
+    }
+    cvv.addEventListener("input", function () {
+      cvv.value = digitsOnly(cvv.value).slice(0, 3);
+    });
+    postcode.addEventListener("input", function () {
+      postcode.value = digitsOnly(postcode.value).slice(0, 5);
+    });
+    if (phone) {
+      phone.addEventListener("input", function () {
+        phone.value = formatTurkeyPhone(phone.value);
+      });
+    }
+    $("#card-holder-name").addEventListener("input", function (event) {
+      event.target.value = event.target.value.replace(/[^\p{L} .'-]/gu, "").replace(/\s{2,}/g, " ");
+    });
+    $("#billing-address").addEventListener("input", function (event) {
+      event.target.value = event.target.value.replace(/[\u0000-\u001f\u007f]/g, "");
+    });
+    form.querySelectorAll("input:not([type='hidden']),select,textarea").forEach(function (input) {
       input.addEventListener("input", function () {
-        input.value = digitsOnly(input.value).slice(0, input.maxLength || 16);
+        if (input.value) input.dataset.touched = "true";
+        updateCardFormValidity(false);
+      });
+      input.addEventListener("change", function () {
+        input.dataset.touched = "true";
+        updateCardFormValidity(false);
+      });
+      input.addEventListener("blur", function () {
+        input.dataset.touched = "true";
+        updateCardFormValidity(false);
       });
     });
+    updateCardFormValidity(false);
 
     form.addEventListener("submit", function (event) {
       if (!currentSession) {
@@ -1035,26 +1295,15 @@
         toast("Kart ödeme şu anda yapılandırılmamış.");
         return;
       }
-      if (digitsOnly(cardNumber.value).length < 13) {
-        event.preventDefault();
-        toast("Kart numarasını kontrol edin.");
-        return;
-      }
-      if (digitsOnly(month.value).length < 1 || digitsOnly(year.value).length < 2 || digitsOnly(cvv.value).length < 3) {
-        event.preventDefault();
-        toast("Son kullanım tarihi ve CVV bilgisini kontrol edin.");
-        return;
-      }
-      var required = ["#card-holder-name", "#card-email", "#card-phone", "#billing-city", "#billing-address", "#billing-postcode"];
-      var missing = required.some(function (selector) {
-        var el = $(selector);
-        return !el || !el.value.trim();
+      form.querySelectorAll("input:not([type='hidden']),select,textarea").forEach(function (input) {
+        input.dataset.touched = "true";
       });
-      if (missing) {
+      if (!updateCardFormValidity(true)) {
         event.preventDefault();
-        toast("Kart ve fatura bilgilerini eksiksiz girin.");
+        toast("Hatalı veya eksik alanları kontrol edin.");
         return;
       }
+      saveCardProfile();
       submit.disabled = true;
       submit.textContent = "3D Secure'a yönlendiriliyor...";
     });

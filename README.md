@@ -99,6 +99,14 @@ fatura/telefon alanlarını alır, Kuveyt Türk `ThreeDModelPayGate` yanıtını
 tarayıcıya iletir. Banka `OkUrl` dönüşünde MD değerini gönderdiğinde servis
 `ThreeDModelProvisionGate` ile provizyon alır; `ResponseCode=00` dönerse sipariş
 kart kanalıyla onaylanır ve entitlement webhook otomatik denenir.
+Ödeme formu kart numarasını, son kullanma tarihini veya CVV / CVC değerini
+saklamaz. Kart üzerindeki ad, telefon ve fatura adresi gibi hassas olmayan
+alanlar sonraki ödemeleri kolaylaştırmak için yalnız kullanıcının tarayıcısında
+hatırlanır.
+
+Kuveyt Türk canlı Sanal POS IP beyaz listesi için ödeme sunucusunun dışarıya
+çıkan sabit IPv4 adresi kullanılmalıdır. Cloudflare DNS adresleri bu amaçla
+kullanılmaz.
 
 Admin endpointleri `MEDASIPAY_ADMIN_KEY` ile korunur. Admin panel sipariş
 listesini, paket bilgisini, müşteri e-postasını, açıklama kodunu ve dekontu bu

@@ -256,9 +256,8 @@
 
               <form id="card-form" class="card-form" method="post" novalidate>
                 <input id="card-token" name="token" type="hidden">
-                <input name="cardType" type="hidden" value="VISA">
                 <input name="billAddrCountry" type="hidden" value="792">
-                <input name="billAddrState" type="hidden" value="34">
+                <input id="billing-state" name="billAddrState" type="hidden">
 
                 <label class="field" for="card-holder-name">
                   <span>Kart üzerindeki ad soyad</span>
@@ -269,41 +268,49 @@
                   <span>Kart numarası</span>
                   <input id="card-number" name="cardNumber" type="text" inputmode="numeric" autocomplete="cc-number" maxlength="23" required>
                 </label>
+                <div class="accepted-card-brands" aria-label="Kabul edilen kartlar">
+                  <span>Kabul edilen kartlar</span>
+                  <div>
+                    <img src="assets/card-brands/troy.png" alt="TROY">
+                    <img src="assets/card-brands/mastercard.svg" alt="Mastercard">
+                    <img src="assets/card-brands/visa.svg" alt="Visa">
+                  </div>
+                </div>
 
                 <div class="form-grid card-grid">
-                  <label class="field" for="card-expiry-month">
-                    <span>Ay</span>
-                    <input id="card-expiry-month" name="cardExpireDateMonth" type="text" inputmode="numeric" autocomplete="cc-exp-month" maxlength="2" placeholder="AA" required>
-                  </label>
-                  <label class="field" for="card-expiry-year">
-                    <span>Yıl</span>
-                    <input id="card-expiry-year" name="cardExpireDateYear" type="text" inputmode="numeric" autocomplete="cc-exp-year" maxlength="4" placeholder="YY" required>
+                  <input id="card-expiry-month" name="cardExpireDateMonth" type="hidden">
+                  <input id="card-expiry-year" name="cardExpireDateYear" type="hidden">
+                  <label class="field" for="card-expiry">
+                    <span>Son kullanma tarihi</span>
+                    <input id="card-expiry" type="text" inputmode="numeric" autocomplete="cc-exp" maxlength="5" placeholder="AA/YY" required>
                   </label>
                   <label class="field" for="card-cvv">
-                    <span>CVV</span>
-                    <input id="card-cvv" name="cardCVV2" type="password" inputmode="numeric" autocomplete="cc-csc" maxlength="4" required>
+                    <span>CVV / CVC</span>
+                    <input id="card-cvv" name="cardCVV2" type="password" inputmode="numeric" autocomplete="cc-csc" maxlength="6" required>
                   </label>
                 </div>
 
                 <label class="field" for="card-email">
                   <span>E-posta</span>
-                  <input id="card-email" name="cardEmail" type="email" autocomplete="email" required>
+                  <input id="card-email" name="cardEmail" type="email" autocomplete="email" readonly required>
                 </label>
 
                 <div class="form-grid phone-grid">
                   <label class="field" for="card-phone-country">
                     <span>Ülke kodu</span>
-                    <input id="card-phone-country" name="cardPhoneCountry" type="text" inputmode="numeric" value="90" maxlength="3" required>
+                    <input id="card-phone-country" name="cardPhoneCountry" type="text" inputmode="numeric" value="90" maxlength="3" readonly required>
                   </label>
                   <label class="field" for="card-phone">
                     <span>Cep telefonu</span>
-                    <input id="card-phone" name="cardPhone" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="15" required>
+                    <input id="card-phone" name="cardPhone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="18" placeholder="5XXXXXXXXX" required>
                   </label>
                 </div>
 
                 <label class="field" for="billing-city">
                   <span>Fatura ili</span>
-                  <input id="billing-city" name="billAddrCity" type="text" autocomplete="address-level1" maxlength="50" required>
+                  <select id="billing-city" name="billAddrCity" autocomplete="address-level1" required>
+                    <option value="">İl seçin</option>
+                  </select>
                 </label>
 
                 <label class="field" for="billing-address">
@@ -313,7 +320,7 @@
 
                 <label class="field" for="billing-postcode">
                   <span>Posta kodu</span>
-                  <input id="billing-postcode" name="billAddrPostCode" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="16" required>
+                  <input id="billing-postcode" name="billAddrPostCode" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" required>
                 </label>
 
                 <button type="submit" class="button primary full" id="card-submit">
@@ -323,7 +330,7 @@
 
                 <p class="helper">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  Kart doğrulaması Kuveyt Türk güvenli ödeme ekranında tamamlanır.
+                  Kart doğrulaması Kuveyt Türk güvenli ödeme ekranında tamamlanır. Kart numarası, son kullanma tarihi ve CVV / CVC kaydedilmez.
                 </p>
               </form>
             </section>

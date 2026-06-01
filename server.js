@@ -688,12 +688,7 @@ function publicCardPayment(cardPayment) {
 }
 
 function kuveytPosConfigured() {
-  return Boolean(
-    stringValue(process.env.KUVEYT_POS_CUSTOMER_ID) &&
-      stringValue(process.env.KUVEYT_POS_MERCHANT_ID) &&
-      kuveytPosUserName() &&
-      stringValue(process.env.KUVEYT_POS_PASSWORD),
-  );
+  return !kuveytPosConfigurationError();
 }
 
 function kuveytPosUserName() {
@@ -710,14 +705,27 @@ function kuveytPosMode() {
   return process.env.APP_ENV === "production" ? "production" : "test";
 }
 
-function kuveytPosConfig() {
+function kuveytPosConfigurationError() {
   const customerId = stringValue(process.env.KUVEYT_POS_CUSTOMER_ID);
   const merchantId = stringValue(process.env.KUVEYT_POS_MERCHANT_ID);
   const userName = kuveytPosUserName();
   const password = stringValue(process.env.KUVEYT_POS_PASSWORD);
   if (!customerId || !merchantId || !userName || !password) {
-    throw httpError(503, "Kuveyt Türk sanal POS bilgileri yapılandırılmamış.");
+    return "Kuveyt Türk sanal POS bilgileri yapılandırılmamış.";
   }
+  if (!/^\d+$/.test(customerId) || !/^\d+$/.test(merchantId)) {
+    return "Kuveyt Türk sanal POS müşteri veya mağaza numarası geçersiz.";
+  }
+  return "";
+}
+
+function kuveytPosConfig() {
+  const customerId = stringValue(process.env.KUVEYT_POS_CUSTOMER_ID);
+  const merchantId = stringValue(process.env.KUVEYT_POS_MERCHANT_ID);
+  const userName = kuveytPosUserName();
+  const password = stringValue(process.env.KUVEYT_POS_PASSWORD);
+  const configurationError = kuveytPosConfigurationError();
+  if (configurationError) throw httpError(503, configurationError);
 
   const mode = kuveytPosMode();
   return {
@@ -781,10 +789,14 @@ async function initiateCardPayment(orderId, fields, request) {
 
   const okUrl = kuveytCallbackUrl("success");
   const failUrl = kuveytCallbackUrl("fail");
+  const cardForBank = {
+    ...card,
+    email: normalizeCardCustomerEmail((orderForBank || order).customerEmail),
+  };
   const xml = kuveytPaymentXml(
     config,
     orderForBank || order,
-    card,
+    cardForBank,
     okUrl,
     failUrl,
     clientIp(request),
@@ -977,28 +989,53 @@ function isAuthorizedCardOrder(order) {
 }
 
 function normalizeCardForm(fields) {
-  const cardHolderName = requiredString(fields.cardHolderName, "Kart sahibi").slice(0, 45);
-  if (cardHolderName.length < 2) throw httpError(400, "Kart sahibi adı eksik.");
+  const cardHolderName = requiredString(fields.cardHolderName, "Kart sahibi")
+    .replace(/\s+/g, " ")
+    .slice(0, 45);
+  if (
+    cardHolderName.length < 2 ||
+    !/^[\p{L} .'-]+$/u.test(cardHolderName) ||
+    cardHolderName.replace(/[^\p{L}]/gu, "").length < 2
+  ) {
+    throw httpError(400, "Kart üzerindeki ad soyadı kontrol edin.");
+  }
 
   const cardNumber = stringValue(fields.cardNumber).replace(/\D/g, "");
-  if (!/^\d{13,19}$/.test(cardNumber)) {
+  if (!/^\d{13,19}$/.test(cardNumber) || !passesLuhnCheck(cardNumber)) {
     throw httpError(400, "Kart numarası geçersiz.");
   }
 
   const month = normalizeExpiryMonth(fields.cardExpireDateMonth);
   const year = normalizeExpiryYear(fields.cardExpireDateYear);
+  assertFutureCardExpiry(month, year);
   const cvv = stringValue(fields.cardCVV2).replace(/\D/g, "");
-  if (!/^\d{3,4}$/.test(cvv)) throw httpError(400, "CVV geçersiz.");
+  if (!/^\d{3}$/.test(cvv)) throw httpError(400, "CVV / CVC geçersiz.");
 
-  const email = normalizeEmail(fields.cardEmail);
-  if (!isValidSupportEmail(email)) throw httpError(400, "Geçerli bir e-posta girin.");
-
-  const countryCode = stringValue(fields.cardPhoneCountry).replace(/\D/g, "") || "90";
+  const countryCode = "90";
   let subscriber = stringValue(fields.cardPhone).replace(/\D/g, "");
   if (subscriber.startsWith(countryCode)) subscriber = subscriber.slice(countryCode.length);
   subscriber = subscriber.replace(/^0+/, "");
-  if (subscriber.length < 7 || subscriber.length > 15) {
+  if (!/^5\d{9}$/.test(subscriber)) {
     throw httpError(400, "Telefon numarası geçersiz.");
+  }
+
+  const billAddrCity = requiredString(fields.billAddrCity, "Fatura ili").slice(0, 50);
+  if (!/^[\p{L} .'-]{2,50}$/u.test(billAddrCity)) {
+    throw httpError(400, "Fatura ili geçersiz.");
+  }
+  const billAddrState = stringValue(fields.billAddrState).replace(/\D/g, "").padStart(2, "0");
+  if (!/^\d{2}$/.test(billAddrState)) throw httpError(400, "Fatura ili kodu geçersiz.");
+
+  const billAddrLine1 = requiredString(fields.billAddrLine1, "Fatura adresi")
+    .replace(/\s+/g, " ")
+    .slice(0, 150);
+  if (billAddrLine1.length < 10 || !/\p{L}/u.test(billAddrLine1)) {
+    throw httpError(400, "Fatura adresini kontrol edin.");
+  }
+
+  const billAddrPostCode = stringValue(fields.billAddrPostCode).replace(/\D/g, "");
+  if (!/^\d{5}$/.test(billAddrPostCode) || !billAddrPostCode.startsWith(billAddrState)) {
+    throw httpError(400, "Posta kodu seçilen il ile eşleşmiyor.");
   }
 
   return {
@@ -1008,14 +1045,13 @@ function normalizeCardForm(fields) {
     cardExpireDateYear: year,
     cardCVV2: cvv,
     cardType: normalizeCardType(fields.cardType, cardNumber),
-    email,
     phoneCountryCode: countryCode.slice(0, 3),
     phoneSubscriber: subscriber,
-    billAddrCity: requiredString(fields.billAddrCity, "Fatura ili").slice(0, 50),
-    billAddrCountry: stringValue(fields.billAddrCountry).replace(/\D/g, "") || "792",
-    billAddrLine1: requiredString(fields.billAddrLine1, "Fatura adresi").slice(0, 150),
-    billAddrPostCode: requiredString(fields.billAddrPostCode, "Posta kodu").slice(0, 16),
-    billAddrState: stringValue(fields.billAddrState).replace(/\D/g, "").slice(0, 3) || "34",
+    billAddrCity,
+    billAddrCountry: "792",
+    billAddrLine1,
+    billAddrPostCode,
+    billAddrState,
   };
 }
 
@@ -1033,15 +1069,51 @@ function normalizeExpiryYear(value) {
   return year;
 }
 
+function assertFutureCardExpiry(month, year) {
+  const now = new Date();
+  const expiryYear = 2000 + Number(year);
+  if (
+    expiryYear < now.getFullYear() ||
+    (expiryYear === now.getFullYear() && Number(month) < now.getMonth() + 1)
+  ) {
+    throw httpError(400, "Kartın son kullanma tarihi geçmiş.");
+  }
+}
+
+function normalizeCardCustomerEmail(value) {
+  const email = normalizeEmail(value);
+  if (!isValidSupportEmail(email)) {
+    throw httpError(400, "Siparişteki e-posta adresi kart ödemesi için geçersiz.");
+  }
+  return email;
+}
+
+function passesLuhnCheck(value) {
+  let sum = 0;
+  let shouldDouble = false;
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    let digit = Number(value[index]);
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+  return sum % 10 === 0;
+}
+
 function normalizeCardType(value, cardNumber) {
   const raw = stringValue(value).toLowerCase();
-  if (raw === "troy") return "Troy";
+  if (raw === "troy") return "TROY";
   if (raw === "mastercard" || raw === "master card") return "MasterCard";
   if (raw === "visa") return "VISA";
+  if (/^9792/.test(cardNumber)) return "TROY";
   if (/^4/.test(cardNumber)) return "VISA";
-  if (/^(5[1-5]|2[2-7])/.test(cardNumber)) return "MasterCard";
-  if (/^9792/.test(cardNumber)) return "Troy";
-  return "VISA";
+  if (/^(5[1-5]\d{2}|2(?:2(?:2[1-9]|[3-9]\d)|[3-6]\d{2}|7(?:[01]\d|20)))/.test(cardNumber)) {
+    return "MasterCard";
+  }
+  throw httpError(400, "Desteklenmeyen kart türü.");
 }
 
 function kuveytMerchantOrderId(order) {
@@ -1269,7 +1341,13 @@ function maskCardNumber(cardNumber) {
 
 function normalizeClientIp(value) {
   const ip = stringValue(value).replace(/^::ffff:/, "");
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) return ip;
+  const parts = ip.split(".");
+  if (
+    parts.length === 4 &&
+    parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)
+  ) {
+    return parts.map(Number).join(".");
+  }
   return "127.0.0.1";
 }
 
