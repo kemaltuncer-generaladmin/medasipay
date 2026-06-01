@@ -1,16 +1,17 @@
 # MedAsi Ödeme
 
-`odeme.medasi.com.tr` için bağımsız banka transferi ödeme ve sipariş takip ekranı.
+`odeme.medasi.com.tr` için bağımsız kart, banka transferi ödeme ve sipariş takip ekranı.
 
-Bu servis Qlinik ve Praticase tarafından üretilen ödeme oturumlarını gösterir.
+Bu servis Qlinik, Praticase ve SourceBase/CardStation tarafından üretilen ödeme oturumlarını gösterir.
 Kullanıcı ödeme sayfasına doğrudan girmez; ödeme talebi ilgili uygulamada oluşur,
 uygulama tek kullanımlık token üretir ve kullanıcı ödeme ekranına yönlendirilir.
 
-Sanal POS veya kart ödeme akışları bu projeye dahil değildir.
+Kart ödemeleri Kuveyt Türk Sanal POS 3D Secure Model ile alınır. IBAN ile EFT/havale
+akışı aynı ekranda eski dekont yükleme akışıyla çalışmaya devam eder.
 
 ## Sayfalar
 
-- Ödeme: Qlinik veya Praticase tokenı ile açılır; IBAN, açıklama kodu, tutar ve dekont yükleme gösterir.
+- Ödeme: Qlinik, Praticase veya SourceBase tokenı ile açılır; kullanıcı IBAN veya kart ödeme yöntemini seçer.
 - Sipariş takip: kullanıcı e-posta ve açıklama kodu ile sipariş durumunu kontrol eder.
 - Token yoksa: doğrudan sipariş takip ekranı görünür; ödeme sekmesi yalnız tokenlı bağlantıda açılır.
 
@@ -80,6 +81,9 @@ Servis canlı olarak şu endpointleri sağlar:
 - `POST /api/checkout-sessions`
 - `GET /api/checkout-sessions/:token`
 - `POST /api/orders/:id/receipt`
+- `POST /api/orders/:id/card/initiate`
+- `POST /api/kuveytpos/3d-callback/success`
+- `POST /api/kuveytpos/3d-callback/fail`
 - `POST /api/orders/track`
 - `GET /api/admin/orders`
 - `GET /api/admin/orders/:id`
@@ -89,6 +93,12 @@ Servis canlı olarak şu endpointleri sağlar:
 - `POST /api/admin/orders/:id/approve`
 - `POST /api/admin/orders/:id/reject`
 - `POST /api/admin/orders/:id/grant-entitlement`
+
+Kart ödeme başlatma endpointi kullanıcıdan kart ve 3D Secure 2.x için gerekli
+fatura/telefon alanlarını alır, Kuveyt Türk `ThreeDModelPayGate` yanıtını
+tarayıcıya iletir. Banka `OkUrl` dönüşünde MD değerini gönderdiğinde servis
+`ThreeDModelProvisionGate` ile provizyon alır; `ResponseCode=00` dönerse sipariş
+kart kanalıyla onaylanır ve entitlement webhook otomatik denenir.
 
 Admin endpointleri `MEDASIPAY_ADMIN_KEY` ile korunur. Admin panel sipariş
 listesini, paket bilgisini, müşteri e-postasını, açıklama kodunu ve dekontu bu
@@ -104,10 +114,11 @@ kullanılmalıdır; aksi halde servis normal sesli ve time-sensitive bildirim
 gönderir.
 
 Canlı ortamda hak tanımı yalnız ürünün beklenen webhook hedefiyle eşleşen
-checkout oturumlarına yapılır (`QLINIK_PAYMENT_WEBHOOK_URL` ve
-`PRATICASE_PAYMENT_WEBHOOK_URL`). Admin onayı ve hak tanımı için dekont
-yüklenmiş olmalıdır; servis dekontu boyut sınırı yanında PDF/PNG/JPEG dosya
-imzasından da doğrular ve süresi dolmuş ödeme oturumuna yükleme kabul etmez.
+checkout oturumlarına yapılır (`QLINIK_PAYMENT_WEBHOOK_URL`,
+`PRATICASE_PAYMENT_WEBHOOK_URL` ve `SOURCEBASE_PAYMENT_WEBHOOK_URL`). Banka transferinde admin onayı ve hak tanımı
+için dekont yüklenmiş olmalıdır; servis dekontu 3 MB boyut sınırı yanında
+PDF/PNG/JPEG dosya imzasından da doğrular ve süresi dolmuş ödeme oturumuna yükleme
+kabul etmez. Kart ödemesinde Kuveyt Türk provizyonu başarılıysa dekont aranmaz.
 Admin onayı onaylayan kullanıcıyı, zamanı ve hak tanımı denemelerini kaydeder;
 yeniden hak tanımı denemeleri paket süresini ilk onay anına sabit tutar.
 Aynı kullanıcı ve uygulama için açık bir abonelik ödeme oturumu varken yeni
@@ -116,9 +127,9 @@ bir oturum üretmek yerine mevcut ödeme bağlantısı döndürülür.
 ## Üretim sınırı
 
 Ödeme servisi kendi deposu, kendi domaini ve kendi verisi ile bağımsız
-kalmalıdır. Qlinik ve Praticase yalnız checkout session oluşturur veya var olan
+kalmalıdır. Qlinik, Praticase ve SourceBase yalnız checkout session oluşturur veya var olan
 tokenı açar; sepet oluşturma ekranı bu projede bulunmaz. Onay sonrası hak tanımı
 webhook ile ilgili ürüne bildirilir.
 
-Sanal POS geldiğinde aynı `orders` yapısı kullanılmalı; yalnız ödeme kanalı
-`bank_transfer` yerine `card` olarak işlenmelidir.
+Ödeme kanalı aynı `orders` yapısında `paymentMethod` ile izlenir:
+`bank_transfer` dekontlu eski akış, `card` Kuveyt Türk Sanal POS akışıdır.

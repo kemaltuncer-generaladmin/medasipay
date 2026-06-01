@@ -1,14 +1,14 @@
 # MedAsi Payment Contract
 
-Bu sözleşme Qlinik ve Praticase ödeme kanallarını kapsar. Sepet, tutar, hak ve
-banka bilgisi ödeme servisinde oluşturulur; frontend tutarı belirleyen kaynak
-değildir.
+Bu sözleşme Qlinik, Praticase ve SourceBase/CardStation ödeme kanallarını
+kapsar. Sepet, tutar, hak, banka bilgisi ve kart provizyonu ödeme servisinde
+oluşturulur; frontend tutarı belirleyen kaynak değildir.
 
 ## Checkout session
 
-Qlinik veya Praticase backend'i kendi içinde ödeme talebini oluşturur ve ödeme
-servisine checkout session oluşturma isteği gönderir. Fiyat, IBAN ve hak bilgisi
-istemciden alınmaz.
+Qlinik, Praticase veya SourceBase backend'i kendi içinde ödeme talebini
+oluşturur ve ödeme servisine checkout session oluşturma isteği gönderir. Fiyat,
+IBAN ve hak bilgisi istemciden alınmaz.
 
 ```json
 {
@@ -45,6 +45,9 @@ istemciden alınmaz.
   }
 }
 ```
+
+SourceBase/CardStation aynı sözleşmeyi `product: "sourcebase"` ve
+`webhookUrl: "https://medasi.com.tr/functions/v1/sourcebase"` ile kullanır.
 
 Yanıt:
 
@@ -95,7 +98,13 @@ render eder:
   ],
   "totalAmount": 40,
   "currency": "TRY",
-  "status": "payment_pending"
+  "status": "payment_pending",
+  "paymentMethod": "bank_transfer",
+  "paymentOptions": {
+    "bankTransfer": true,
+    "card": true
+  },
+  "cardPayment": null
 }
 ```
 
@@ -121,8 +130,32 @@ Content-Type: multipart/form-data
 
 Alanlar:
 
-- `receipt`: PDF, PNG veya JPG dekont dosyası
+- `receipt`: En fazla 3 MB, PDF/PNG/JPEG dekont dosyası
 - `token`: checkout tokenı
+
+## Card payment
+
+Kullanıcı kartı seçerse ödeme ekranı formu sunucuya gönderir. Sunucu Kuveyt Türk
+3D Secure Model `ThreeDModelPayGate` isteğini oluşturur ve bankanın HTML yanıtını
+tarayıcıya iletir.
+
+```http
+POST /api/orders/ord_1001/card/initiate
+Content-Type: application/x-www-form-urlencoded
+```
+
+Alanlar:
+
+- `token`: checkout tokenı
+- `cardHolderName`, `cardNumber`, `cardExpireDateMonth`, `cardExpireDateYear`, `cardCVV2`
+- `cardEmail`, `cardPhoneCountry`, `cardPhone`
+- `billAddrCity`, `billAddrLine1`, `billAddrPostCode`
+
+Banka `OkUrl` dönüşünde `AuthenticationResponse` içinde `ResponseCode=00` ve
+`MD` gönderirse servis `ThreeDModelProvisionGate` ile provizyon alır. Provizyon
+`ResponseCode=00` dönerse sipariş `paymentMethod=card` ve `status=approved`
+olarak kaydedilir; entitlement webhook otomatik denenir. Webhook başarılı olursa
+status `entitled` olur.
 
 ## Order tracking
 

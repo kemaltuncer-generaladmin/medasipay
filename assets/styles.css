@@ -439,6 +439,72 @@ a {
   letter-spacing: -0.02em;
 }
 
+.payment-method-selector {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.payment-method-option {
+  align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  display: flex;
+  gap: 10px;
+  min-height: 76px;
+  padding: 12px;
+  text-align: left;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.payment-method-option svg {
+  color: var(--primary);
+  flex: none;
+  height: 20px;
+  margin-top: 2px;
+  width: 20px;
+}
+
+.payment-method-option strong,
+.payment-method-option small {
+  display: block;
+}
+
+.payment-method-option strong {
+  font-size: 14px;
+}
+
+.payment-method-option small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.payment-method-option.active {
+  background: #ecfdf5;
+  border-color: #98d9c8;
+  box-shadow: var(--ring);
+}
+
+.payment-method-option:disabled {
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+.payment-detail-column {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.method-panel {
+  min-width: 0;
+}
+
 .info-list {
   border-top: 1px solid var(--soft-line);
   margin: 0;
@@ -506,6 +572,18 @@ a {
 
 .receipt-form {
   margin-top: 18px;
+}
+
+.card-form {
+  margin-top: 4px;
+}
+
+.card-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.phone-grid {
+  grid-template-columns: 96px minmax(0, 1fr);
 }
 
 .status-panel {
@@ -1274,9 +1352,12 @@ input[type="file"] {
 
   .two-column,
   .two-column.narrow-right,
+  .payment-method-selector,
   .login,
   .metrics,
   .session-meta,
+  .card-grid,
+  .phone-grid,
   .settings-grid {
     grid-template-columns: 1fr;
   }

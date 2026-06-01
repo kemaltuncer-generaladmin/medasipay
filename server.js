@@ -14,14 +14,27 @@ const ordersFile = path.join(dataDir, "orders.json");
 const devicesFile = path.join(dataDir, "admin-devices.json");
 const publicDir = __dirname;
 const maxJsonBytes = 128 * 1024;
-const maxReceiptBytes = Number(process.env.MAX_RECEIPT_BYTES || 10 * 1024 * 1024);
+const maxReceiptBytes = Number(process.env.MAX_RECEIPT_BYTES || 3 * 1024 * 1024);
+const maxCardFormBytes = 64 * 1024;
+const maxKuveytCallbackBytes = 512 * 1024;
 const defaultBankAccount = {
   holder: "MedAsi Teknoloji A.Ş.",
   iban: "TR11 0006 2000 0000 0123 4567 89",
 };
+const kuveytPosEndpoints = {
+  testPayGate:
+    "https://boatest.kuveytturk.com.tr/boa.virtualpos.services/Home/ThreeDModelPayGate",
+  testProvisionGate:
+    "https://boatest.kuveytturk.com.tr/boa.virtualpos.services/Home/ThreeDModelProvisionGate",
+  productionPayGate:
+    "https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home/ThreeDModelPayGate",
+  productionProvisionGate:
+    "https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home/ThreeDModelProvisionGate",
+};
 const defaultPaymentWebhookUrls = {
   qlinik: "https://qlinik.medasi.com.tr/functions/v1/qlinik",
   praticase: "https://qlinik.medasi.com.tr/functions/v1/praticase-storekit-verify",
+  sourcebase: "https://medasi.com.tr/functions/v1/sourcebase",
 };
 let storeMutationQueue = Promise.resolve();
 let deviceMutationQueue = Promise.resolve();
@@ -59,6 +72,46 @@ async function route(request, response) {
     requireServiceKey(request);
     const order = await createOrder(await readJson(request));
     sendJson(response, 201, checkoutResponse(order));
+    return;
+  }
+
+  const cardInitiateMatch = pathname.match(/^\/api\/orders\/([^/]+)\/card\/initiate$/);
+  if (method === "POST" && cardInitiateMatch) {
+    const result = await initiateCardPayment(
+      cardInitiateMatch[1],
+      await readFormUrlEncoded(request, maxCardFormBytes),
+      request,
+    ).catch((error) => ({ error }));
+    if (result.error) {
+      sendHtml(
+        response,
+        result.error.statusCode || 500,
+        renderCardResultPage(
+          "Kart ödemesi başlatılamadı",
+          result.error.statusCode === 500
+            ? "Sanal POS isteği şu anda tamamlanamadı. Lütfen tekrar deneyin veya IBAN ile devam edin."
+            : result.error.message,
+        ),
+      );
+      return;
+    }
+    sendHtml(response, 200, result.html);
+    return;
+  }
+
+  if (
+    pathname === "/api/kuveytpos/3d-callback/success" ||
+    pathname === "/api/kuveytpos/3d-callback/fail"
+  ) {
+    if (method !== "POST") {
+      redirect(response, checkoutResultUrl(null, "failed", "Kart doğrulama dönüşü eksik."));
+      return;
+    }
+    await handleKuveytPosCallback(
+      request,
+      response,
+      pathname.endsWith("/success"),
+    );
     return;
   }
 
@@ -415,7 +468,7 @@ async function sendResendEmail(apiKey, payload) {
 }
 
 async function createOrder(input) {
-  const product = enumValue(input.product, ["qlinik", "praticase"], "qlinik");
+  const product = enumValue(input.product, ["qlinik", "praticase", "sourcebase"], "qlinik");
   const channel = enumValue(input.channel, ["web", "android"], "web");
   const accountId = requiredString(input.accountId, "accountId");
   const customerEmail = requiredString(input.customerEmail, "customerEmail");
@@ -473,6 +526,7 @@ async function createOrder(input) {
       customerEmail,
       returnUrl,
       webhookUrl,
+      paymentMethod: "bank_transfer",
       bankAccount: paymentBankAccount,
       items,
       totalAmount: totalAmount(items),
@@ -566,6 +620,12 @@ function publicOrder(order) {
     totalAmount: order.totalAmount,
     currency: order.currency,
     status: order.status,
+    paymentMethod: order.paymentMethod || "bank_transfer",
+    paymentOptions: {
+      bankTransfer: true,
+      card: kuveytPosConfigured(),
+    },
+    cardPayment: publicCardPayment(order.cardPayment),
     receipt: order.receipt
       ? {
         originalName: order.receipt.originalName,
@@ -607,6 +667,657 @@ function adminOrder(order) {
   };
 }
 
+function publicCardPayment(cardPayment) {
+  if (!cardPayment) return null;
+  return {
+    status: cardPayment.status || "",
+    merchantOrderId: cardPayment.merchantOrderId || "",
+    maskedCard: cardPayment.maskedCard || "",
+    cardHolderName: cardPayment.cardHolderName || "",
+    bankOrderId: cardPayment.bankOrderId || "",
+    provisionNumber: cardPayment.provisionNumber || "",
+    rrn: cardPayment.rrn || "",
+    stan: cardPayment.stan || "",
+    responseCode: cardPayment.responseCode || "",
+    responseMessage: cardPayment.responseMessage || "",
+    transactionTime: cardPayment.transactionTime || "",
+    initiatedAt: cardPayment.initiatedAt || "",
+    authorizedAt: cardPayment.authorizedAt || "",
+    failedAt: cardPayment.failedAt || "",
+  };
+}
+
+function kuveytPosConfigured() {
+  return Boolean(
+    stringValue(process.env.KUVEYT_POS_CUSTOMER_ID) &&
+      stringValue(process.env.KUVEYT_POS_MERCHANT_ID) &&
+      kuveytPosUserName() &&
+      stringValue(process.env.KUVEYT_POS_PASSWORD),
+  );
+}
+
+function kuveytPosUserName() {
+  return stringValue(
+    process.env.KUVEYT_POS_USER_NAME ||
+      process.env.KUVEYT_POS_USERNAME,
+  );
+}
+
+function kuveytPosMode() {
+  const mode = stringValue(process.env.KUVEYT_POS_ENV).toLowerCase();
+  if (["production", "prod", "live"].includes(mode)) return "production";
+  if (["test", "sandbox"].includes(mode)) return "test";
+  return process.env.APP_ENV === "production" ? "production" : "test";
+}
+
+function kuveytPosConfig() {
+  const customerId = stringValue(process.env.KUVEYT_POS_CUSTOMER_ID);
+  const merchantId = stringValue(process.env.KUVEYT_POS_MERCHANT_ID);
+  const userName = kuveytPosUserName();
+  const password = stringValue(process.env.KUVEYT_POS_PASSWORD);
+  if (!customerId || !merchantId || !userName || !password) {
+    throw httpError(503, "Kuveyt Türk sanal POS bilgileri yapılandırılmamış.");
+  }
+
+  const mode = kuveytPosMode();
+  return {
+    mode,
+    customerId,
+    merchantId,
+    userName,
+    password,
+    hashedPassword: sha1Base64(password, "utf8"),
+    currencyCode: stringValue(process.env.KUVEYT_POS_CURRENCY_CODE) || "0949",
+    installmentCount: stringValue(process.env.KUVEYT_POS_INSTALLMENT_COUNT) || "0",
+    payGateUrl: stringValue(process.env.KUVEYT_POS_PAY_GATE_URL) ||
+      (mode === "production"
+        ? kuveytPosEndpoints.productionPayGate
+        : kuveytPosEndpoints.testPayGate),
+    provisionGateUrl: stringValue(process.env.KUVEYT_POS_PROVISION_GATE_URL) ||
+      (mode === "production"
+        ? kuveytPosEndpoints.productionProvisionGate
+        : kuveytPosEndpoints.testProvisionGate),
+  };
+}
+
+async function initiateCardPayment(orderId, fields, request) {
+  const config = kuveytPosConfig();
+  const card = normalizeCardForm(fields);
+  const token = stringValue(fields.token);
+  const now = new Date().toISOString();
+  let orderForBank;
+
+  const order = await updateOrder(orderId, (item) => {
+    if (item.token !== token) throw httpError(403, "Ödeme tokenı eşleşmedi.");
+    if (isExpired(item)) throw httpError(410, "Ödeme oturumunun süresi doldu.");
+    if (item.status !== "payment_pending") {
+      throw httpError(409, "Bu sipariş için kart ödemesi başlatılamaz.");
+    }
+    const merchantOrderId = item.cardPayment?.merchantOrderId || kuveytMerchantOrderId(item);
+    const amount = kuveytAmount(item);
+    orderForBank = {
+      ...item,
+      paymentMethod: "card",
+      cardPayment: {
+        ...(item.cardPayment || {}),
+        status: "authentication_started",
+        merchantOrderId,
+        amount,
+        currencyCode: config.currencyCode,
+        installmentCount: config.installmentCount,
+        maskedCard: maskCardNumber(card.cardNumber),
+        cardHolderName: card.cardHolderName,
+        responseCode: "",
+        responseMessage: "",
+        initiatedAt: now,
+        updatedAt: now,
+      },
+    };
+    return {
+      ...orderForBank,
+      updatedAt: now,
+    };
+  });
+
+  const okUrl = kuveytCallbackUrl("success");
+  const failUrl = kuveytCallbackUrl("fail");
+  const xml = kuveytPaymentXml(
+    config,
+    orderForBank || order,
+    card,
+    okUrl,
+    failUrl,
+    clientIp(request),
+  );
+
+  try {
+    const html = await postKuveytXml(config.payGateUrl, xml);
+    await updateOrder(order.id, (item) => ({
+      ...item,
+      cardPayment: {
+        ...(item.cardPayment || {}),
+        status: "authentication_redirected",
+        payGateRespondedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      updatedAt: new Date().toISOString(),
+    }));
+    return { html };
+  } catch (error) {
+    await updateCardPaymentFailure(
+      order.id,
+      "authentication_start_failed",
+      null,
+      "Kart doğrulama başlatılamadı.",
+    );
+    throw error.statusCode ? error : httpError(502, "Kuveyt Türk sanal POS servisine ulaşılamadı.");
+  }
+}
+
+async function handleKuveytPosCallback(request, response, successRoute) {
+  const fields = await readFormUrlEncoded(request, maxKuveytCallbackBytes);
+  const xml = decodeAuthenticationResponse(fields.AuthenticationResponse);
+  const payload = parseKuveytResponse(xml);
+  const merchantOrderId = payload.MerchantOrderId;
+  const order = merchantOrderId
+    ? await findOrderByMerchantOrderId(merchantOrderId)
+    : null;
+
+  if (!order) {
+    sendHtml(
+      response,
+      404,
+      renderCardResultPage(
+        "Kart doğrulama sonucu eşleştirilemedi",
+        "Banka dönüşündeki sipariş bilgisi ödeme oturumuyla eşleşmedi. Lütfen destek ile iletişime geçin.",
+      ),
+    );
+    return;
+  }
+
+  const failureMessage = payload.ResponseMessage ||
+    "Kart doğrulaması tamamlanamadı. Dilerseniz tekrar deneyebilir veya IBAN ile devam edebilirsiniz.";
+
+  if (!successRoute || payload.ResponseCode !== "00" || !payload.MD) {
+    await updateCardPaymentFailure(order.id, "authentication_failed", payload, failureMessage);
+    redirect(response, checkoutResultUrl(order, "failed", failureMessage));
+    return;
+  }
+
+  let config;
+  try {
+    config = kuveytPosConfig();
+  } catch (error) {
+    await updateCardPaymentFailure(order.id, "configuration_missing", payload, error.message);
+    redirect(response, checkoutResultUrl(order, "failed", error.message));
+    return;
+  }
+
+  if (!verifyKuveytResponseHash(payload, config, false)) {
+    const message = "Banka doğrulama imzası eşleşmedi.";
+    await updateCardPaymentFailure(order.id, "authentication_hash_failed", payload, message);
+    redirect(response, checkoutResultUrl(order, "failed", message));
+    return;
+  }
+
+  let provision;
+  try {
+    provision = await provisionCardPayment(order, payload, config);
+  } catch (error) {
+    const message = error.statusCode === 502
+      ? "Kart doğrulandı ancak provizyon isteği tamamlanamadı."
+      : error.message;
+    await updateCardPaymentFailure(order.id, "provision_failed", payload, message);
+    redirect(response, checkoutResultUrl(order, "failed", message));
+    return;
+  }
+
+  if (!provision.ok) {
+    const message = provision.payload.ResponseMessage || "Kart provizyonu onaylanmadı.";
+    await updateCardPaymentFailure(order.id, "provision_declined", provision.payload, message);
+    redirect(response, checkoutResultUrl(order, "failed", message));
+    return;
+  }
+
+  const authorized = await markCardPaymentAuthorized(order.id, payload, provision.payload);
+  redirect(response, checkoutResultUrl(authorized, "success", "Kart ödemeniz başarıyla alındı."));
+}
+
+async function provisionCardPayment(order, authPayload, config) {
+  const freshOrder = await findOrder(order.id);
+  if (!freshOrder) throw httpError(404, "Sipariş bulunamadı.");
+  const xml = kuveytProvisionXml(
+    config,
+    freshOrder.cardPayment?.merchantOrderId || kuveytMerchantOrderId(freshOrder),
+    freshOrder.cardPayment?.amount || kuveytAmount(freshOrder),
+    authPayload.MD,
+  );
+  const text = await postKuveytXml(config.provisionGateUrl, xml);
+  const payload = parseKuveytResponse(text);
+  const hashOk = verifyKuveytResponseHash(payload, config, Boolean(payload.RRN));
+  return {
+    ok: payload.ResponseCode === "00" && hashOk,
+    payload: {
+      ...payload,
+      hashVerified: hashOk,
+    },
+  };
+}
+
+async function markCardPaymentAuthorized(orderId, authPayload, provisionPayload) {
+  const now = new Date().toISOString();
+  const approved = await updateOrder(orderId, (order) => ({
+    ...order,
+    status: "approved",
+    paymentMethod: "card",
+    approvedAt: order.approvedAt || now,
+    approvedBy: "kuveytpos",
+    approvalNote: "Kuveyt Türk sanal POS otorizasyonu alındı.",
+    cardPayment: {
+      ...(order.cardPayment || {}),
+      status: "authorized",
+      authenticationResponseCode: authPayload.ResponseCode || "",
+      authenticationResponseMessage: authPayload.ResponseMessage || "",
+      mdReceived: Boolean(authPayload.MD),
+      bankOrderId: provisionPayload.OrderId || authPayload.OrderId || "",
+      provisionNumber: provisionPayload.ProvisionNumber || "",
+      rrn: provisionPayload.RRN || "",
+      stan: provisionPayload.Stan || "",
+      responseCode: provisionPayload.ResponseCode || "",
+      responseMessage: provisionPayload.ResponseMessage || "",
+      transactionTime: provisionPayload.TransactionTime || "",
+      hashVerified: provisionPayload.hashVerified !== false,
+      authorizedAt: now,
+      updatedAt: now,
+    },
+    updatedAt: now,
+  }));
+  return attemptGrantEntitlement(orderId, {
+    adminActor: "kuveytpos",
+    adminNote: "Kuveyt Türk sanal POS kart ödemesi",
+  }).then((granted) => granted || approved);
+}
+
+async function attemptGrantEntitlement(orderId, body) {
+  try {
+    return await grantEntitlement(orderId, body);
+  } catch (error) {
+    console.error("Card entitlement grant failed", error);
+    return updateOrder(orderId, (order) => ({
+      ...order,
+      lastWebhookError: `card_grant_failed:${String(error.message || error).slice(0, 240)}`,
+      lastWebhookAttemptAt: new Date().toISOString(),
+      lastWebhookAttemptedBy: body.adminActor || "kuveytpos",
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+}
+
+async function updateCardPaymentFailure(orderId, status, payload, message) {
+  return updateOrder(orderId, (order) => ({
+    ...order,
+    cardPayment: {
+      ...(order.cardPayment || {}),
+      status,
+      bankOrderId: payload?.OrderId || order.cardPayment?.bankOrderId || "",
+      responseCode: payload?.ResponseCode || "",
+      responseMessage: message || payload?.ResponseMessage || "",
+      rrn: payload?.RRN || order.cardPayment?.rrn || "",
+      stan: payload?.Stan || order.cardPayment?.stan || "",
+      failedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    updatedAt: new Date().toISOString(),
+  }));
+}
+
+function isAuthorizedCardOrder(order) {
+  return order.paymentMethod === "card" &&
+    order.cardPayment?.status === "authorized";
+}
+
+function normalizeCardForm(fields) {
+  const cardHolderName = requiredString(fields.cardHolderName, "Kart sahibi").slice(0, 45);
+  if (cardHolderName.length < 2) throw httpError(400, "Kart sahibi adı eksik.");
+
+  const cardNumber = stringValue(fields.cardNumber).replace(/\D/g, "");
+  if (!/^\d{13,19}$/.test(cardNumber)) {
+    throw httpError(400, "Kart numarası geçersiz.");
+  }
+
+  const month = normalizeExpiryMonth(fields.cardExpireDateMonth);
+  const year = normalizeExpiryYear(fields.cardExpireDateYear);
+  const cvv = stringValue(fields.cardCVV2).replace(/\D/g, "");
+  if (!/^\d{3,4}$/.test(cvv)) throw httpError(400, "CVV geçersiz.");
+
+  const email = normalizeEmail(fields.cardEmail);
+  if (!isValidSupportEmail(email)) throw httpError(400, "Geçerli bir e-posta girin.");
+
+  const countryCode = stringValue(fields.cardPhoneCountry).replace(/\D/g, "") || "90";
+  let subscriber = stringValue(fields.cardPhone).replace(/\D/g, "");
+  if (subscriber.startsWith(countryCode)) subscriber = subscriber.slice(countryCode.length);
+  subscriber = subscriber.replace(/^0+/, "");
+  if (subscriber.length < 7 || subscriber.length > 15) {
+    throw httpError(400, "Telefon numarası geçersiz.");
+  }
+
+  return {
+    cardHolderName,
+    cardNumber,
+    cardExpireDateMonth: month,
+    cardExpireDateYear: year,
+    cardCVV2: cvv,
+    cardType: normalizeCardType(fields.cardType, cardNumber),
+    email,
+    phoneCountryCode: countryCode.slice(0, 3),
+    phoneSubscriber: subscriber,
+    billAddrCity: requiredString(fields.billAddrCity, "Fatura ili").slice(0, 50),
+    billAddrCountry: stringValue(fields.billAddrCountry).replace(/\D/g, "") || "792",
+    billAddrLine1: requiredString(fields.billAddrLine1, "Fatura adresi").slice(0, 150),
+    billAddrPostCode: requiredString(fields.billAddrPostCode, "Posta kodu").slice(0, 16),
+    billAddrState: stringValue(fields.billAddrState).replace(/\D/g, "").slice(0, 3) || "34",
+  };
+}
+
+function normalizeExpiryMonth(value) {
+  const digits = stringValue(value).replace(/\D/g, "").padStart(2, "0").slice(-2);
+  const month = Number(digits);
+  if (month < 1 || month > 12) throw httpError(400, "Kart son kullanım ayı geçersiz.");
+  return digits;
+}
+
+function normalizeExpiryYear(value) {
+  const digits = stringValue(value).replace(/\D/g, "");
+  const year = digits.length === 4 ? digits.slice(2) : digits;
+  if (!/^\d{2}$/.test(year)) throw httpError(400, "Kart son kullanım yılı geçersiz.");
+  return year;
+}
+
+function normalizeCardType(value, cardNumber) {
+  const raw = stringValue(value).toLowerCase();
+  if (raw === "troy") return "Troy";
+  if (raw === "mastercard" || raw === "master card") return "MasterCard";
+  if (raw === "visa") return "VISA";
+  if (/^4/.test(cardNumber)) return "VISA";
+  if (/^(5[1-5]|2[2-7])/.test(cardNumber)) return "MasterCard";
+  if (/^9792/.test(cardNumber)) return "Troy";
+  return "VISA";
+}
+
+function kuveytMerchantOrderId(order) {
+  return String(order.id || order.reference || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+}
+
+function kuveytAmount(order) {
+  const amount = Math.round((numberValue(order.totalAmount) || 0) * 100);
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw httpError(400, "Kart ödeme tutarı geçersiz.");
+  }
+  return String(amount);
+}
+
+function kuveytCallbackUrl(result) {
+  return `${appUrl}/api/kuveytpos/3d-callback/${result}`;
+}
+
+function kuveytPaymentXml(config, order, card, okUrl, failUrl, ip) {
+  const amount = order.cardPayment?.amount || kuveytAmount(order);
+  const merchantOrderId = order.cardPayment?.merchantOrderId || kuveytMerchantOrderId(order);
+  const hashData = kuveytHash(
+    config.merchantId +
+      merchantOrderId +
+      amount +
+      okUrl +
+      failUrl +
+      config.userName +
+      config.hashedPassword,
+  );
+  const clientIpValue = normalizeClientIp(ip);
+
+  return `<KuveytTurkVPosMessage xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+<APIVersion>TDV2.0.0</APIVersion>
+<OkUrl>${escapeXml(okUrl)}</OkUrl>
+<FailUrl>${escapeXml(failUrl)}</FailUrl>
+<HashData>${escapeXml(hashData)}</HashData>
+<MerchantId>${escapeXml(config.merchantId)}</MerchantId>
+<CustomerId>${escapeXml(config.customerId)}</CustomerId>
+<DeviceData>
+<DeviceChannel>02</DeviceChannel>
+<ClientIP>${escapeXml(clientIpValue)}</ClientIP>
+</DeviceData>
+<CardHolderData>
+<BillAddrCity>${escapeXml(card.billAddrCity)}</BillAddrCity>
+<BillAddrCountry>${escapeXml(card.billAddrCountry)}</BillAddrCountry>
+<BillAddrLine1>${escapeXml(card.billAddrLine1)}</BillAddrLine1>
+<BillAddrPostCode>${escapeXml(card.billAddrPostCode)}</BillAddrPostCode>
+<BillAddrState>${escapeXml(card.billAddrState)}</BillAddrState>
+<Email>${escapeXml(card.email)}</Email>
+<MobilePhone>
+<Cc>${escapeXml(card.phoneCountryCode)}</Cc>
+<Subscriber>${escapeXml(card.phoneSubscriber)}</Subscriber>
+</MobilePhone>
+</CardHolderData>
+<UserName>${escapeXml(config.userName)}</UserName>
+<CardNumber>${escapeXml(card.cardNumber)}</CardNumber>
+<CardExpireDateYear>${escapeXml(card.cardExpireDateYear)}</CardExpireDateYear>
+<CardExpireDateMonth>${escapeXml(card.cardExpireDateMonth)}</CardExpireDateMonth>
+<CardCVV2>${escapeXml(card.cardCVV2)}</CardCVV2>
+<CardHolderName>${escapeXml(card.cardHolderName)}</CardHolderName>
+<CardType>${escapeXml(card.cardType)}</CardType>
+<BatchID>0</BatchID>
+<TransactionType>Sale</TransactionType>
+<InstallmentCount>${escapeXml(config.installmentCount)}</InstallmentCount>
+<Amount>${escapeXml(amount)}</Amount>
+<DisplayAmount>${escapeXml(amount)}</DisplayAmount>
+<CurrencyCode>${escapeXml(config.currencyCode)}</CurrencyCode>
+<MerchantOrderId>${escapeXml(merchantOrderId)}</MerchantOrderId>
+<TransactionSecurity>3</TransactionSecurity>
+</KuveytTurkVPosMessage>`;
+}
+
+function kuveytProvisionXml(config, merchantOrderId, amount, md) {
+  const hashData = kuveytHash(
+    config.merchantId +
+      merchantOrderId +
+      amount +
+      config.userName +
+      config.hashedPassword,
+  );
+  return `<KuveytTurkVPosMessage xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+<APIVersion>TDV2.0.0</APIVersion>
+<HashData>${escapeXml(hashData)}</HashData>
+<MerchantId>${escapeXml(config.merchantId)}</MerchantId>
+<CustomerId>${escapeXml(config.customerId)}</CustomerId>
+<UserName>${escapeXml(config.userName)}</UserName>
+<TransactionType>Sale</TransactionType>
+<InstallmentCount>${escapeXml(config.installmentCount)}</InstallmentCount>
+<CurrencyCode>${escapeXml(config.currencyCode)}</CurrencyCode>
+<Amount>${escapeXml(amount)}</Amount>
+<MerchantOrderId>${escapeXml(merchantOrderId)}</MerchantOrderId>
+<TransactionSecurity>3</TransactionSecurity>
+<KuveytTurkVPosAdditionalData>
+<AdditionalData>
+<Key>MD</Key>
+<Data>${escapeXml(md)}</Data>
+</AdditionalData>
+</KuveytTurkVPosAdditionalData>
+</KuveytTurkVPosMessage>`;
+}
+
+async function postKuveytXml(url, xml) {
+  const timeoutMs = Number(process.env.KUVEYT_POS_TIMEOUT_MS || 60 * 1000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "text/html, application/xml, text/xml, */*",
+        "Content-Type": "application/xml; charset=utf-8",
+      },
+      body: xml,
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw httpError(502, "Kuveyt Türk sanal POS servisi isteği reddetti.");
+    }
+    return text;
+  } catch (error) {
+    if (error.statusCode) throw error;
+    throw httpError(502, "Kuveyt Türk sanal POS servisine ulaşılamadı.");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function decodeAuthenticationResponse(value) {
+  const raw = stringValue(value);
+  if (!raw) throw httpError(400, "Banka dönüş mesajı eksik.");
+  try {
+    return raw.includes("<") ? raw : decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function parseKuveytResponse(xml) {
+  const text = stringValue(xml);
+  if (!text) throw httpError(400, "Banka dönüş XML'i eksik.");
+  return {
+    OrderId: xmlTagValue(text, "OrderId"),
+    MerchantOrderId: xmlTagValue(text, "MerchantOrderId"),
+    ProvisionNumber: xmlTagValue(text, "ProvisionNumber"),
+    RRN: xmlTagValue(text, "RRN"),
+    Stan: xmlTagValue(text, "Stan"),
+    ResponseCode: xmlTagValue(text, "ResponseCode"),
+    ResponseMessage: xmlTagValue(text, "ResponseMessage"),
+    HashData: xmlTagValue(text, "HashData"),
+    MD: xmlTagValue(text, "MD"),
+    TransactionTime: xmlTagValue(text, "TransactionTime"),
+    ReferenceId: xmlTagValue(text, "ReferenceId"),
+    BusinessKey: xmlTagValue(text, "BusinessKey"),
+  };
+}
+
+function xmlTagValue(xml, tag) {
+  const match = String(xml).match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match ? decodeXmlEntities(match[1].trim()) : "";
+}
+
+function verifyKuveytResponseHash(payload, config, includeRrn) {
+  if (!payload.HashData) return true;
+  const parts = includeRrn
+    ? [
+      payload.MerchantOrderId,
+      payload.RRN,
+      payload.ResponseCode,
+      payload.OrderId,
+      config.hashedPassword,
+    ]
+    : [
+      payload.MerchantOrderId,
+      payload.ResponseCode,
+      payload.OrderId,
+      config.hashedPassword,
+    ];
+  const expected = kuveytHash(parts.join(""));
+  return safeEqualText(payload.HashData, expected);
+}
+
+function sha1Base64(value, encoding) {
+  return crypto.createHash("sha1")
+    .update(Buffer.from(String(value), encoding))
+    .digest("base64");
+}
+
+function kuveytHash(value) {
+  return sha1Base64(value, "latin1");
+}
+
+function safeEqualText(left, right) {
+  const a = Buffer.from(String(left || "").trim());
+  const b = Buffer.from(String(right || "").trim());
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function escapeXml(value) {
+  return String(value ?? "").replace(/[<>&'"]/g, (char) => ({
+    "<": "&lt;",
+    ">": "&gt;",
+    "&": "&amp;",
+    "'": "&apos;",
+    '"': "&quot;",
+  })[char]);
+}
+
+function decodeXmlEntities(value) {
+  return String(value || "").replace(/&(lt|gt|amp|apos|quot);/g, (entity, name) => ({
+    lt: "<",
+    gt: ">",
+    amp: "&",
+    apos: "'",
+    quot: '"',
+  })[name] || entity);
+}
+
+function maskCardNumber(cardNumber) {
+  const digits = String(cardNumber || "").replace(/\D/g, "");
+  if (digits.length < 10) return "";
+  return `${digits.slice(0, 6)}******${digits.slice(-4)}`;
+}
+
+function normalizeClientIp(value) {
+  const ip = stringValue(value).replace(/^::ffff:/, "");
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) return ip;
+  return "127.0.0.1";
+}
+
+async function findOrderByMerchantOrderId(merchantOrderId) {
+  const normalized = stringValue(merchantOrderId);
+  const store = await readStore();
+  return store.orders.find((order) =>
+    order.cardPayment?.merchantOrderId === normalized ||
+      kuveytMerchantOrderId(order) === normalized ||
+      order.id === normalized
+  ) || null;
+}
+
+function checkoutResultUrl(order, result, message) {
+  const url = new URL("/", appUrl);
+  if (order?.token) {
+    url.searchParams.set("token", order.token);
+  } else {
+    url.searchParams.set("page", "track");
+  }
+  url.searchParams.set("cardResult", result);
+  if (message) url.searchParams.set("cardMessage", String(message).slice(0, 180));
+  return url.toString();
+}
+
+function renderCardResultPage(title, message) {
+  return `<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtmlValue(title)}</title>
+    <style>
+      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6fb;color:#0f172a;margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}
+      main{background:#fff;border:1px solid #e2e6ee;border-radius:14px;box-shadow:0 18px 38px -16px rgba(15,23,42,.18);max-width:520px;padding:28px}
+      h1{font-size:24px;margin:0 0 10px}p{color:#475569;line-height:1.55}a{color:#0f766e;font-weight:700}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtmlValue(title)}</h1>
+      <p>${escapeHtmlValue(message)}</p>
+      <a href="${escapeHtmlValue(appUrl)}">Ödeme ekranına dön</a>
+    </main>
+  </body>
+</html>`;
+}
+
 async function saveReceipt(order, file) {
   await ensureDataDirs();
   const extension = extensionFor(file);
@@ -616,6 +1327,7 @@ async function saveReceipt(order, file) {
   return {
     ...order,
     status: "receipt_uploaded",
+    paymentMethod: "bank_transfer",
     receipt: {
       originalName: file.filename || `dekont${extension}`,
       mimeType: file.mimeType,
@@ -654,7 +1366,9 @@ async function grantEntitlement(orderId, body) {
   const order = await findOrder(orderId);
   if (!order) throw httpError(404, "Sipariş bulunamadı.");
   if (order.status === "entitled") return order;
-  if (!order.receipt) throw httpError(409, "Dekont yüklenmeden hak tanımlanamaz.");
+  if (!order.receipt && !isAuthorizedCardOrder(order)) {
+    throw httpError(409, "Ödeme alınmadan hak tanımlanamaz.");
+  }
   if (order.status !== "approved") {
     throw httpError(409, "Hak tanımından önce sipariş onaylanmalı.");
   }
@@ -1056,6 +1770,15 @@ async function readJson(request) {
   }
 }
 
+async function readFormUrlEncoded(request, limit) {
+  const body = await readBody(request, limit || maxJsonBytes);
+  if (!body.length) return {};
+  const params = new URLSearchParams(body.toString("utf8"));
+  const fields = {};
+  for (const [key, value] of params.entries()) fields[key] = value;
+  return fields;
+}
+
 async function readMultipart(request) {
   const contentType = request.headers["content-type"] || "";
   const match = String(contentType).match(/boundary=(?:"([^"]+)"|([^;]+))/i);
@@ -1082,11 +1805,11 @@ async function readMultipart(request) {
     if (!name) continue;
     if (filename) {
       if (content.length > maxReceiptBytes) {
-        throw httpError(413, "Dekont dosyası çok büyük.");
+        throw httpError(413, "Dekont dosyası en fazla 3 MB olmalı.");
       }
       const detectedMimeType = detectReceiptMime(content);
       if (!detectedMimeType) {
-        throw httpError(415, "Dekont PDF, PNG veya JPG olmalı.");
+        throw httpError(415, "Dekont PDF, PNG veya JPEG olmalı.");
       }
       file = { fieldName: name, filename, mimeType: detectedMimeType, buffer: content };
     } else {
@@ -1200,6 +1923,23 @@ function sendText(response, status, body, type) {
   response.end(body);
 }
 
+function sendHtml(response, status, body) {
+  response.writeHead(status, {
+    "Cache-Control": "no-store",
+    "Content-Type": "text/html; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  });
+  response.end(body);
+}
+
+function redirect(response, location) {
+  response.writeHead(303, {
+    "Cache-Control": "no-store",
+    Location: location,
+  });
+  response.end();
+}
+
 function sendError(response, error) {
   const status = error.statusCode || 500;
   const message = status === 500
@@ -1233,7 +1973,9 @@ function totalAmount(items) {
 }
 
 function productPrefix(product) {
-  return product === "praticase" ? "PRC" : "QLN";
+  if (product === "praticase") return "PRC";
+  if (product === "sourcebase") return "SRC";
+  return "QLN";
 }
 
 function uniqueValue(items, key, factory) {
@@ -1294,7 +2036,9 @@ function paymentWebhookUrl(value, product) {
   if (process.env.APP_ENV !== "production") return webhookUrl;
   const envName = product === "praticase"
     ? "PRATICASE_PAYMENT_WEBHOOK_URL"
-    : "QLINIK_PAYMENT_WEBHOOK_URL";
+    : product === "sourcebase"
+      ? "SOURCEBASE_PAYMENT_WEBHOOK_URL"
+      : "QLINIK_PAYMENT_WEBHOOK_URL";
   const expectedUrl = optionalUrl(
     process.env[envName] || defaultPaymentWebhookUrls[product],
   );

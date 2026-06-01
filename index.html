@@ -4,14 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f766e">
-    <meta name="description" content="MedAsi Ödeme — Qlinik ve Praticase siparişleri için güvenli banka transferi ve sipariş takip ekranı.">
+    <meta name="description" content="MedAsi Ödeme — Qlinik ve Praticase siparişleri için güvenli kart, banka transferi ve sipariş takip ekranı.">
     <meta name="robots" content="noindex,nofollow">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>MedAsi Ödeme — Güvenli sipariş ekranı</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="assets/styles.css?v=checkout-5">
+    <link rel="stylesheet" href="assets/styles.css?v=checkout-6">
     <script src="https://cdn.jsdelivr.net/npm/motion@11.11.13/dist/motion.js"></script>
-    <script src="assets/app.js?v=checkout-5" defer></script>
+    <script src="assets/app.js?v=checkout-6" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">İçeriğe geç</a>
@@ -21,7 +21,7 @@
         <span class="brand-mark" aria-hidden="true">M</span>
         <span class="brand-text">
           <strong>MedAsi Ödeme</strong>
-          <small>Güvenli Banka Transferi</small>
+          <small>Güvenli Ödeme</small>
         </span>
       </a>
       <nav class="nav" aria-label="Ana menü">
@@ -73,7 +73,7 @@
             </span>
             <span class="pill">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7M9 7V5a3 3 0 0 1 6 0v2"/></svg>
-              Banka EFT/Havale
+              Kart / EFT-Havale
             </span>
             <span class="pill" id="expiry-pill" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
@@ -85,7 +85,7 @@
             <div>
               <span class="label" id="session-product-label">Ödeme</span>
               <h1 id="session-title">Ödeme</h1>
-              <p id="session-subtitle" class="muted">Aşağıdaki banka hesabına tutarı yatırın ve dekontunuzu sisteme yükleyin.</p>
+              <p id="session-subtitle" class="muted">Ödeme yönteminizi seçin; kartla 3D Secure doğrulamasına geçin veya IBAN ile EFT/havale yapın.</p>
             </div>
             <span class="pill" id="session-reference">-</span>
           </div>
@@ -93,8 +93,8 @@
           <div class="trust-card" role="note">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6Z"/><path d="m9 12 2 2 4-4"/></svg>
             <div>
-              <strong>Kartla ödeme için sanal POS hazırlığı başladı.</strong>
-              <span>Şimdilik ödemeler, yasal vergilendirmesi yapılacak bireysel şahıs şirketi hesabına EFT/havale ile alınır. POS tarafı kurdele kesimini bitirince kartla ödeme de burada mümkün olacak.</span>
+              <strong>Kart ödemeleri Kuveyt Türk 3D Secure ile alınır.</strong>
+              <span>Kartla ödeme seçildiğinde doğrulama bankanın güvenli ekranında tamamlanır; IBAN seçeneği eski EFT/havale akışıyla çalışmaya devam eder.</span>
             </div>
           </div>
 
@@ -129,6 +129,23 @@
                 <strong id="session-total">-</strong>
               </div>
 
+              <div class="payment-method-selector" id="payment-method-selector" role="radiogroup" aria-label="Ödeme yöntemi">
+                <button type="button" class="payment-method-option active" data-payment-method="bank_transfer" role="radio" aria-checked="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18"/><path d="M5 10v9"/><path d="M9 10v9"/><path d="M15 10v9"/><path d="M19 10v9"/><path d="M4 19h16"/><path d="M12 3 3 8h18Z"/></svg>
+                  <span>
+                    <strong>IBAN ile ödeme</strong>
+                    <small>EFT/havale ve dekont yükleme</small>
+                  </span>
+                </button>
+                <button type="button" class="payment-method-option" data-payment-method="card" id="card-method-option" role="radio" aria-checked="false">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+                  <span>
+                    <strong>Kartla ödeme</strong>
+                    <small>Kredi veya banka kartı</small>
+                  </span>
+                </button>
+              </div>
+
               <div class="callout info" id="payment-help">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
                 <div>
@@ -138,12 +155,13 @@
               </div>
 
               <button type="button" class="button primary proceed-to-payment" id="proceed-to-payment">
-                Ödemeye geç
+                Seçilen yöntemle devam et
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
               </button>
             </section>
 
-            <section class="panel" id="bank-panel">
+            <div class="payment-detail-column">
+            <section class="panel method-panel" id="bank-panel">
               <div class="iban-hero" id="iban-hero" hidden>
                 <div class="iban-hero-inner">
                   <span class="iban-hero-label">Havale / EFT yapılacak IBAN</span>
@@ -198,19 +216,118 @@
               <form id="receipt-form" class="receipt-form" novalidate>
                 <label for="receipt-file">Dekont yükle</label>
                 <div class="file-row">
-                  <input id="receipt-file" name="receipt" type="file" accept=".pdf,.png,.jpg,.jpeg">
+                  <input id="receipt-file" name="receipt" type="file" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg">
                   <button type="submit" class="button primary" id="receipt-submit">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>
                     Dekontu gönder
                   </button>
                 </div>
-                <p class="muted helper-text" id="receipt-meta">Dosya seçilmedi. PDF, PNG veya JPG kabul edilir (en fazla 10 MB).</p>
+                <p class="muted helper-text" id="receipt-meta">Dosya seçilmedi. PDF, PNG veya JPEG kabul edilir (en fazla 3 MB).</p>
                 <label class="check confirm-check">
                   <input id="payment-confirm" type="checkbox">
                   <span>Belirtilen IBAN'a tam tutarı yatırdım ve açıklama kodunu transfere ekledim.</span>
                 </label>
               </form>
             </section>
+            <section class="panel method-panel" id="card-panel" hidden>
+              <div class="section-title">
+                <div class="section-head">
+                  <span class="label">Kartla ödeme</span>
+                  <h2>Kredi / banka kartı</h2>
+                </div>
+                <span class="status info" id="card-status">3D Secure</span>
+              </div>
+
+              <div class="callout info" id="card-result" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                <div>
+                  <strong id="card-result-title">Kart ödeme sonucu</strong>
+                  <span id="card-result-message">-</span>
+                </div>
+              </div>
+
+              <div class="callout" id="card-disabled-note" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                <div>
+                  <strong>Kart ödeme şu anda kapalı.</strong>
+                  <span>Sanal POS bilgileri yapılandırılana kadar IBAN ile ödeme yapabilirsiniz.</span>
+                </div>
+              </div>
+
+              <form id="card-form" class="card-form" method="post" novalidate>
+                <input id="card-token" name="token" type="hidden">
+                <input name="cardType" type="hidden" value="VISA">
+                <input name="billAddrCountry" type="hidden" value="792">
+                <input name="billAddrState" type="hidden" value="34">
+
+                <label class="field" for="card-holder-name">
+                  <span>Kart üzerindeki ad soyad</span>
+                  <input id="card-holder-name" name="cardHolderName" type="text" autocomplete="cc-name" maxlength="45" required>
+                </label>
+
+                <label class="field" for="card-number">
+                  <span>Kart numarası</span>
+                  <input id="card-number" name="cardNumber" type="text" inputmode="numeric" autocomplete="cc-number" maxlength="23" required>
+                </label>
+
+                <div class="form-grid card-grid">
+                  <label class="field" for="card-expiry-month">
+                    <span>Ay</span>
+                    <input id="card-expiry-month" name="cardExpireDateMonth" type="text" inputmode="numeric" autocomplete="cc-exp-month" maxlength="2" placeholder="AA" required>
+                  </label>
+                  <label class="field" for="card-expiry-year">
+                    <span>Yıl</span>
+                    <input id="card-expiry-year" name="cardExpireDateYear" type="text" inputmode="numeric" autocomplete="cc-exp-year" maxlength="4" placeholder="YY" required>
+                  </label>
+                  <label class="field" for="card-cvv">
+                    <span>CVV</span>
+                    <input id="card-cvv" name="cardCVV2" type="password" inputmode="numeric" autocomplete="cc-csc" maxlength="4" required>
+                  </label>
+                </div>
+
+                <label class="field" for="card-email">
+                  <span>E-posta</span>
+                  <input id="card-email" name="cardEmail" type="email" autocomplete="email" required>
+                </label>
+
+                <div class="form-grid phone-grid">
+                  <label class="field" for="card-phone-country">
+                    <span>Ülke kodu</span>
+                    <input id="card-phone-country" name="cardPhoneCountry" type="text" inputmode="numeric" value="90" maxlength="3" required>
+                  </label>
+                  <label class="field" for="card-phone">
+                    <span>Cep telefonu</span>
+                    <input id="card-phone" name="cardPhone" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="15" required>
+                  </label>
+                </div>
+
+                <label class="field" for="billing-city">
+                  <span>Fatura ili</span>
+                  <input id="billing-city" name="billAddrCity" type="text" autocomplete="address-level1" maxlength="50" required>
+                </label>
+
+                <label class="field" for="billing-address">
+                  <span>Fatura adresi</span>
+                  <input id="billing-address" name="billAddrLine1" type="text" autocomplete="address-line1" maxlength="150" required>
+                </label>
+
+                <label class="field" for="billing-postcode">
+                  <span>Posta kodu</span>
+                  <input id="billing-postcode" name="billAddrPostCode" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="16" required>
+                </label>
+
+                <button type="submit" class="button primary full" id="card-submit">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+                  3D Secure ile öde
+                </button>
+
+                <p class="helper">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Kart doğrulaması Kuveyt Türk güvenli ödeme ekranında tamamlanır.
+                </p>
+              </form>
+            </section>
+            </div>
           </div>
 
           <section class="panel status-panel">
@@ -226,8 +343,8 @@
           <section class="faq" aria-label="Sıkça sorulan sorular">
             <h2>Sıkça sorulan sorular</h2>
             <details>
-              <summary>Kart bilgilerimi neden istemiyorsunuz?</summary>
-              <p>Sanal POS entegrasyonları başladı; kartla ödeme yakında açılacak. Şu an ödemeniz yasal vergilendirmesi yapılacak bireysel şahıs şirketi hesabına EFT/havale ile alınır. POS kurdele kesimini tamamlayana kadar kart numarası, CVV veya OTP istenmez; kart bilgilerinizi MedAsi'ye veya bu sayfaya asla girmeyin.</p>
+              <summary>Kartla ödeme nasıl çalışır?</summary>
+              <p>Kart bilgileri bu güvenli ödeme oturumunda alınır ve Kuveyt Türk 3D Secure doğrulamasına gönderilir. Doğrulama başarılı olursa banka provizyonu alınır ve siparişiniz otomatik tamamlanır.</p>
             </details>
             <details>
               <summary>Açıklama kodunu yazmazsam ne olur?</summary>
@@ -401,7 +518,7 @@
     <footer class="footer">
       <div class="footer-side">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        <span>Bağlantı SSL ile şifrelenir. MedAsi sizden kart bilgisi istemez.</span>
+        <span>Bağlantı SSL ile şifrelenir. Kart ödemeleri Kuveyt Türk 3D Secure ile doğrulanır.</span>
       </div>
       <div class="footer-side">
         <span>© MedAsi Teknoloji A.Ş.</span>

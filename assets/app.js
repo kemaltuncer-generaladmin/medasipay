@@ -13,6 +13,10 @@
     holder: "MedAsi Teknoloji A.Ş.",
     iban: "TR11 0006 2000 0000 0123 4567 89"
   };
+  var RECEIPT_MAX_BYTES = 3 * 1024 * 1024;
+  var RECEIPT_ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+  var RECEIPT_ALLOWED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"];
+  var RECEIPT_HELP_TEXT = "Dosya seçilmedi. PDF, PNG veya JPEG kabul edilir (en fazla 3 MB).";
 
   var money = new Intl.NumberFormat("tr-TR", {
     style: "currency",
@@ -89,6 +93,7 @@
   ];
 
   var currentSession = null;
+  var currentPaymentMethod = "bank_transfer";
 
   function $(selector) {
     return document.querySelector(selector);
@@ -261,6 +266,12 @@
       reference: source.reference || source.paymentReference || createReferenceFromToken(token),
       expiresAt: source.expiresAt || "",
       status: source.status || "payment_pending",
+      paymentMethod: source.paymentMethod || "bank_transfer",
+      paymentOptions: {
+        bankTransfer: !source.paymentOptions || source.paymentOptions.bankTransfer !== false,
+        card: Boolean(source.paymentOptions && source.paymentOptions.card === true)
+      },
+      cardPayment: source.cardPayment || null,
       items: items,
       totalAmount: amount > 0 ? amount : total(items),
       bankAccount: {
@@ -535,6 +546,31 @@
       "Açıklama kodu üretildi",
       escapeHtml(session.reference)));
 
+    if (session.paymentMethod === "card" || session.cardPayment) {
+      var cardPayment = session.cardPayment || {};
+      var cardAuthorized = cardPayment.status === "authorized" ||
+        status === "approved" ||
+        status === "entitled";
+      var cardFailed = String(cardPayment.status || "").indexOf("failed") >= 0 ||
+        String(cardPayment.status || "").indexOf("declined") >= 0;
+      var cardState = cardAuthorized ? "done" : (cardFailed ? "danger" : "current");
+      rows.push(timelineRow(cardState,
+        cardAuthorized ? "Kart ödemesi alındı" : (cardFailed ? "Kart ödemesi tamamlanamadı" : "Kart doğrulaması"),
+        cardPayment.responseMessage || (cardAuthorized ? "Kuveyt Türk provizyonu onaylandı" : "3D Secure doğrulaması bekleniyor")));
+
+      var cardReviewState = reviewDone ? "done" : (cardAuthorized ? "current" : "");
+      rows.push(timelineRow(cardReviewState,
+        reviewDone ? "Ödeme onaylandı" : "Ödeme kontrolü",
+        reviewDone ? "Kart provizyon bilgisi doğrulandı" : "Provizyon sonrası sipariş onaylanır"));
+
+      var cardEntitlementState = entitlementDone ? "done" : (reviewDone ? "current" : "");
+      rows.push(timelineRow(cardEntitlementState,
+        "Hak tanımı",
+        entitlementDone ? "İlgili hesaba işlendi" : "Onay sonrası ilgili hesaba işlenir"));
+
+      return rows.join("");
+    }
+
     var receiptState = receiptDone ? "done" : (statusIs(status, "payment_pending") ? "current" : "");
     var receiptMeta = receiptFileName
       ? escapeHtml(receiptFileName)
@@ -613,6 +649,9 @@
     $("#payment-reference").setAttribute("data-copy", session.reference);
     $("#bank-total").textContent = formatMoney(session.totalAmount);
     $("#session-total").textContent = formatMoney(session.totalAmount);
+    configurePaymentMethods(session);
+    configureCardForm(session);
+    renderCardResult(session);
 
     $("#session-items").innerHTML = session.items.length ? session.items.map(function (item) {
       return (
@@ -629,6 +668,86 @@
     updatePaymentUiForStatus(session);
   }
 
+  function configurePaymentMethods(session) {
+    var canUseCard = session.paymentOptions && session.paymentOptions.card !== false;
+    var cardOption = $("#card-method-option");
+    if (cardOption) {
+      cardOption.disabled = !canUseCard;
+      cardOption.setAttribute("aria-disabled", canUseCard ? "false" : "true");
+    }
+
+    var result = String(readParam("cardResult") || "").toLowerCase();
+    var preferred = result ? "card" : (session.paymentMethod === "card" ? "card" : "bank_transfer");
+    if (preferred === "card" && !canUseCard && !session.cardPayment) {
+      preferred = "bank_transfer";
+    }
+    setPaymentMethod(preferred);
+  }
+
+  function setPaymentMethod(method) {
+    currentPaymentMethod = method === "card" ? "card" : "bank_transfer";
+    var bankPanel = $("#bank-panel");
+    var cardPanel = $("#card-panel");
+    if (bankPanel) bankPanel.hidden = currentPaymentMethod !== "bank_transfer";
+    if (cardPanel) cardPanel.hidden = currentPaymentMethod !== "card";
+
+    document.querySelectorAll("[data-payment-method]").forEach(function (button) {
+      var active = button.getAttribute("data-payment-method") === currentPaymentMethod;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-checked", active ? "true" : "false");
+    });
+
+    var help = $("#payment-help");
+    if (help && currentSession && currentSession.status === "payment_pending" && !isExpiredSession(currentSession)) {
+      help.className = "callout info";
+      if (currentPaymentMethod === "card") {
+        help.querySelector("strong").textContent = "Kartla ödeme 3D Secure ile tamamlanır.";
+        help.querySelector("span").textContent = "Kart doğrulaması başarılı olursa provizyon alınır ve sipariş otomatik tamamlanır.";
+      } else {
+        help.querySelector("strong").textContent = "Tutarı tam olarak ve TL hesabına yatırın.";
+        help.querySelector("span").textContent = "Eksik tutar veya açıklama kodu olmadan yapılan transferler manuel inceleme nedeniyle gecikebilir.";
+      }
+    }
+  }
+
+  function configureCardForm(session) {
+    var form = $("#card-form");
+    if (!form) return;
+    var canUseCard = session.paymentOptions && session.paymentOptions.card !== false;
+    var canSubmit = canUseCard &&
+      session.status === "payment_pending" &&
+      !isExpiredSession(session) &&
+      session.orderId;
+    form.action = API_BASE + "/api/orders/" + encodeURIComponent(session.orderId || "") + "/card/initiate";
+    $("#card-token").value = session.token || "";
+    $("#card-email").value = session.customerEmail || "";
+    form.querySelectorAll("input,button,select,textarea").forEach(function (el) {
+      el.disabled = el.type === "hidden" ? false : !canSubmit;
+    });
+    var disabledNote = $("#card-disabled-note");
+    if (disabledNote) disabledNote.hidden = canUseCard;
+  }
+
+  function renderCardResult(session) {
+    var result = String(readParam("cardResult") || "").toLowerCase();
+    var message = readParam("cardMessage");
+    var box = $("#card-result");
+    if (!box || !result) return;
+    var success = result === "success";
+    box.hidden = false;
+    box.className = "callout " + (success ? "success" : "");
+    $("#card-result-title").textContent = success
+      ? "Kart ödemeniz alındı."
+      : "Kart ödemesi tamamlanamadı.";
+    $("#card-result-message").textContent = message ||
+      (success
+        ? "Siparişiniz otomatik onay sürecine alındı."
+        : "Tekrar kartla deneyebilir veya IBAN ile devam edebilirsiniz.");
+    if (session.cardPayment && session.cardPayment.responseMessage && !message) {
+      $("#card-result-message").textContent = session.cardPayment.responseMessage;
+    }
+  }
+
   function updatePaymentUiForStatus(session) {
     var form = $("#receipt-form");
     var help = $("#payment-help");
@@ -638,6 +757,16 @@
     if (form) {
       form.querySelectorAll("input,button").forEach(function (el) {
         el.disabled = !canUpload;
+      });
+    }
+
+    var cardForm = $("#card-form");
+    if (cardForm) {
+      var canCardSubmit = session.paymentOptions && session.paymentOptions.card !== false &&
+        session.status === "payment_pending" &&
+        !isExpiredSession(session);
+      cardForm.querySelectorAll("input,button,select,textarea").forEach(function (el) {
+        el.disabled = el.type === "hidden" ? false : !canCardSubmit;
       });
     }
 
@@ -660,8 +789,13 @@
       help.querySelector("span").textContent = "Tutar ve açıklama kodu doğrulandıktan sonra siparişiniz onaylanacaktır.";
     } else {
       help.className = "callout info";
-      help.querySelector("strong").textContent = "Tutarı tam olarak ve TL hesabına yatırın.";
-      help.querySelector("span").textContent = "Eksik tutar veya açıklama kodu olmadan yapılan transferler manuel inceleme nedeniyle gecikebilir.";
+      if (currentPaymentMethod === "card") {
+        help.querySelector("strong").textContent = "Kartla ödeme 3D Secure ile tamamlanır.";
+        help.querySelector("span").textContent = "Kart doğrulaması başarılı olursa provizyon alınır ve sipariş otomatik tamamlanır.";
+      } else {
+        help.querySelector("strong").textContent = "Tutarı tam olarak ve TL hesabına yatırın.";
+        help.querySelector("span").textContent = "Eksik tutar veya açıklama kodu olmadan yapılan transferler manuel inceleme nedeniyle gecikebilir.";
+      }
     }
   }
 
@@ -688,6 +822,13 @@
     }
 
     var meta = resumeMeta[order.status] || resumeMeta.payment_pending;
+    if (order.paymentMethod === "card" && order.status === "payment_pending") {
+      meta = {
+        title: "Bu sipariş için kart ödemesi tamamlanmadı.",
+        subtitle: "Kartla tekrar deneyebilir veya IBAN ile ödeme akışına geçebilirsiniz.",
+        button: "Ödemeye devam et"
+      };
+    }
     $("#track-resume-title").textContent = meta.title;
     $("#track-resume-subtitle").textContent = meta.subtitle;
 
@@ -740,6 +881,32 @@
     return (bytes / 1024 / 1024).toFixed(1) + " MB";
   }
 
+  function receiptFileExtension(file) {
+    var name = (file && file.name ? file.name : "").toLowerCase();
+    var index = name.lastIndexOf(".");
+    return index >= 0 ? name.slice(index) : "";
+  }
+
+  function isAllowedReceiptFile(file) {
+    var type = (file && file.type ? file.type : "").toLowerCase();
+    var extension = receiptFileExtension(file);
+    return RECEIPT_ALLOWED_MIME_TYPES.indexOf(type) >= 0 ||
+      RECEIPT_ALLOWED_EXTENSIONS.indexOf(extension) >= 0;
+  }
+
+  function receiptFileError(file) {
+    if (!file) {
+      return "Dekont dosyası seçin.";
+    }
+    if (file.size > RECEIPT_MAX_BYTES) {
+      return "Dekont dosyası en fazla 3 MB olmalı.";
+    }
+    if (!isAllowedReceiptFile(file)) {
+      return "Dekont PDF, PNG veya JPEG olmalı.";
+    }
+    return "";
+  }
+
   function uploadReceipt(file) {
     if (!API_BASE || !currentSession || !currentSession.orderId) {
       return Promise.resolve({});
@@ -754,11 +921,19 @@
       body: body,
       credentials: "same-origin"
     }).then(function (response) {
-      if (!response.ok) {
-        throw new Error("Receipt upload failed");
-      }
-      return response.json().catch(function () {
-        return {};
+      return response.text().then(function (text) {
+        var payload = {};
+        if (text) {
+          try {
+            payload = JSON.parse(text);
+          } catch (error) {
+            payload = {};
+          }
+        }
+        if (!response.ok) {
+          throw new Error(payload.error || "Dekont gönderilemedi. Lütfen tekrar deneyin.");
+        }
+        return payload;
       });
     });
   }
@@ -790,15 +965,98 @@
 
   function bindProceedButton() {
     var btn = $("#proceed-to-payment");
-    var target = $("#bank-panel");
-    if (!btn || !target) return;
+    if (!btn) return;
     btn.addEventListener("click", function () {
+      var target = currentPaymentMethod === "card" ? $("#card-panel") : $("#bank-panel");
+      if (!target) return;
       target.scrollIntoView({ behavior: "smooth", block: "start" });
       var m = window.Motion;
       if (!m || !m.animate) return;
       setTimeout(function () {
         m.animate(target, { boxShadow: ["0 0 0 0px #0f766e00", "0 0 0 4px #0f766e66", "0 0 0 0px #0f766e00"] }, { duration: 0.9, easing: "ease-out" });
       }, 400);
+    });
+  }
+
+  function bindPaymentMethodSelector() {
+    document.querySelectorAll("[data-payment-method]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (button.disabled) {
+          toast("Kart ödeme şu anda yapılandırılmamış.");
+          return;
+        }
+        setPaymentMethod(button.getAttribute("data-payment-method"));
+      });
+    });
+  }
+
+  function digitsOnly(value) {
+    return String(value || "").replace(/\D/g, "");
+  }
+
+  function formatCardNumber(value) {
+    return digitsOnly(value).slice(0, 19).replace(/(.{4})/g, "$1 ").trim();
+  }
+
+  function bindCardForm() {
+    var form = $("#card-form");
+    if (!form) return;
+    var cardNumber = $("#card-number");
+    var month = $("#card-expiry-month");
+    var year = $("#card-expiry-year");
+    var cvv = $("#card-cvv");
+    var submit = $("#card-submit");
+
+    if (cardNumber) {
+      cardNumber.addEventListener("input", function () {
+        cardNumber.value = formatCardNumber(cardNumber.value);
+      });
+    }
+    [month, year, cvv, $("#card-phone-country")].forEach(function (input) {
+      if (!input) return;
+      input.addEventListener("input", function () {
+        input.value = digitsOnly(input.value).slice(0, input.maxLength || 16);
+      });
+    });
+
+    form.addEventListener("submit", function (event) {
+      if (!currentSession) {
+        event.preventDefault();
+        toast("Ödeme oturumu bulunamadı.");
+        return;
+      }
+      if (isExpiredSession(currentSession)) {
+        event.preventDefault();
+        toast("Ödeme oturumunun süresi dolmuş.");
+        return;
+      }
+      if (currentSession.paymentOptions && currentSession.paymentOptions.card === false) {
+        event.preventDefault();
+        toast("Kart ödeme şu anda yapılandırılmamış.");
+        return;
+      }
+      if (digitsOnly(cardNumber.value).length < 13) {
+        event.preventDefault();
+        toast("Kart numarasını kontrol edin.");
+        return;
+      }
+      if (digitsOnly(month.value).length < 1 || digitsOnly(year.value).length < 2 || digitsOnly(cvv.value).length < 3) {
+        event.preventDefault();
+        toast("Son kullanım tarihi ve CVV bilgisini kontrol edin.");
+        return;
+      }
+      var required = ["#card-holder-name", "#card-email", "#card-phone", "#billing-city", "#billing-address", "#billing-postcode"];
+      var missing = required.some(function (selector) {
+        var el = $(selector);
+        return !el || !el.value.trim();
+      });
+      if (missing) {
+        event.preventDefault();
+        toast("Kart ve fatura bilgilerini eksiksiz girin.");
+        return;
+      }
+      submit.disabled = true;
+      submit.textContent = "3D Secure'a yönlendiriliyor...";
     });
   }
 
@@ -841,7 +1099,13 @@
     fileInput.addEventListener("change", function (event) {
       var file = event.target.files[0];
       if (!file) {
-        meta.textContent = "Dosya seçilmedi. PDF, PNG veya JPG kabul edilir (en fazla 10 MB).";
+        meta.textContent = RECEIPT_HELP_TEXT;
+        return;
+      }
+      var error = receiptFileError(file);
+      if (error) {
+        meta.textContent = error;
+        toast(error);
         return;
       }
       meta.textContent = file.name + " — " + formatFileSize(file.size);
@@ -865,6 +1129,12 @@
         toast("Dekont dosyası seçin.");
         return;
       }
+      var fileError = receiptFileError(file);
+      if (fileError) {
+        meta.textContent = fileError;
+        toast(fileError);
+        return;
+      }
 
       submit.disabled = true;
       var originalHTML = submit.innerHTML;
@@ -876,8 +1146,8 @@
         renderTimeline(currentSession, file.name);
         updatePaymentUiForStatus(currentSession);
         toast("Dekont gönderildi. Ekibimiz kontrol edecektir.");
-      }).catch(function () {
-        toast("Dekont gönderilemedi. Lütfen tekrar deneyin.");
+      }).catch(function (error) {
+        toast(error && error.message ? error.message : "Dekont gönderilemedi. Lütfen tekrar deneyin.");
       }).finally(function () {
         submit.disabled = false;
         submit.innerHTML = originalHTML;
@@ -978,6 +1248,8 @@
   function bindEvents() {
     bindCopyEvents();
     bindProceedButton();
+    bindPaymentMethodSelector();
+    bindCardForm();
     bindReceiptForm();
     bindTrackForm();
     bindSupportForm();
