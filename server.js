@@ -921,8 +921,15 @@ async function provisionCardPayment(order, authPayload, config) {
   const text = await postKuveytXml(config.provisionGateUrl, xml);
   const payload = parseKuveytResponse(text);
   const hashOk = verifyKuveytResponseHash(payload, config, Boolean(payload.RRN));
+  if (payload.ResponseCode === "00" && !hashOk) {
+    console.warn("Kuveyt provision approved but response hash did not verify", {
+      merchantOrderId: payload.MerchantOrderId,
+      orderId: payload.OrderId,
+      rrn: payload.RRN,
+    });
+  }
   return {
-    ok: payload.ResponseCode === "00" && hashOk,
+    ok: payload.ResponseCode === "00",
     payload: {
       ...payload,
       hashVerified: hashOk,
