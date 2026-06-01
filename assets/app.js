@@ -1028,7 +1028,7 @@
 
   function formatCardExpiry(value) {
     var digits = digitsOnly(value).slice(0, 4);
-    return digits.length > 2 ? digits.slice(0, 2) + "/" + digits.slice(2) : digits;
+    return digits.length >= 2 ? digits.slice(0, 2) + "/" + digits.slice(2) : digits;
   }
 
   function formatTurkeyPhone(value) {
@@ -1248,6 +1248,21 @@
     }
     cvv.addEventListener("input", function () {
       cvv.value = digitsOnly(cvv.value).slice(0, 3);
+    });
+    cvv.addEventListener("keydown", function (event) {
+      if (
+        event.key.length === 1 &&
+        !/\d/.test(event.key) &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+      }
+    });
+    cvv.addEventListener("paste", function (event) {
+      event.preventDefault();
+      cvv.value = digitsOnly(event.clipboardData.getData("text")).slice(0, 3);
+      cvv.dispatchEvent(new Event("input", { bubbles: true }));
     });
     postcode.addEventListener("input", function () {
       postcode.value = digitsOnly(postcode.value).slice(0, 5);

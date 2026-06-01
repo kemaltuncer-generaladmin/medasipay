@@ -575,33 +575,52 @@ a {
 }
 
 .card-form {
-  margin-top: 4px;
+  margin-top: 10px;
+}
+
+.card-form-section {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.card-form-section + .card-form-section {
+  border-top: 1px solid var(--soft-line);
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.card-form-section legend {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
 }
 
 .accepted-card-brands {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: space-between;
-  margin-top: 10px;
+  margin: 7px 0 2px;
 }
 
 .accepted-card-brands > span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
 .accepted-card-brands div {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 7px;
 }
 
 .accepted-card-brands img {
   display: block;
-  height: 22px;
-  max-width: 58px;
+  height: 13px;
+  max-width: 36px;
   object-fit: contain;
   opacity: 1;
   transition: opacity 120ms ease;
@@ -613,8 +632,8 @@ a {
 }
 
 .accepted-card-brands img[alt="TROY"] {
-  height: 25px;
-  max-width: 64px;
+  height: 15px;
+  max-width: 40px;
 }
 
 .card-grid {
@@ -623,6 +642,10 @@ a {
 
 .phone-grid {
   grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.billing-grid {
+  grid-template-columns: minmax(0, 1fr) 132px;
 }
 
 .status-panel {
@@ -1422,6 +1445,7 @@ input[type="file"] {
   .session-meta,
   .card-grid,
   .phone-grid,
+  .billing-grid,
   .settings-grid {
     grid-template-columns: 1fr;
   }

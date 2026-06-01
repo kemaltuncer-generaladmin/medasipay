@@ -259,69 +259,76 @@
                 <input name="billAddrCountry" type="hidden" value="792">
                 <input id="billing-state" name="billAddrState" type="hidden">
 
-                <label class="field" for="card-holder-name">
-                  <span>Kart üzerindeki ad soyad</span>
-                  <input id="card-holder-name" name="cardHolderName" type="text" autocomplete="cc-name" maxlength="45" required>
-                </label>
-
-                <label class="field" for="card-number">
-                  <span>Kart numarası</span>
-                  <input id="card-number" name="cardNumber" type="text" inputmode="numeric" autocomplete="cc-number" maxlength="23" required>
-                </label>
-                <div class="accepted-card-brands" aria-label="Kabul edilen kartlar">
-                  <span>Kabul edilen kartlar</span>
-                  <div>
-                    <img src="assets/card-brands/troy.png" alt="TROY">
-                    <img src="assets/card-brands/mastercard.svg" alt="Mastercard">
-                    <img src="assets/card-brands/visa.svg" alt="Visa">
+                <fieldset class="card-form-section">
+                  <legend>Kart bilgileri</legend>
+                  <label class="field" for="card-number">
+                    <span>Kart numarası</span>
+                    <input id="card-number" name="cardNumber" type="text" inputmode="numeric" autocomplete="cc-number" maxlength="23" placeholder="0000 0000 0000 0000" required>
+                  </label>
+                  <div class="accepted-card-brands" aria-label="Kabul edilen kartlar">
+                    <span>Kabul edilen kartlar</span>
+                    <div>
+                      <img src="assets/card-brands/troy.png" alt="TROY">
+                      <img src="assets/card-brands/mastercard.svg" alt="Mastercard">
+                      <img src="assets/card-brands/visa.svg" alt="Visa">
+                    </div>
                   </div>
-                </div>
 
-                <div class="form-grid card-grid">
-                  <input id="card-expiry-month" name="cardExpireDateMonth" type="hidden">
-                  <input id="card-expiry-year" name="cardExpireDateYear" type="hidden">
-                  <label class="field" for="card-expiry">
-                    <span>Son kullanma tarihi</span>
-                    <input id="card-expiry" type="text" inputmode="numeric" autocomplete="cc-exp" maxlength="5" placeholder="AA/YY" required>
+                  <label class="field" for="card-holder-name">
+                    <span>Kart üzerindeki ad soyad</span>
+                    <input id="card-holder-name" name="cardHolderName" type="text" autocomplete="cc-name" maxlength="45" placeholder="Kart üzerindeki ad soyad" required>
                   </label>
-                  <label class="field" for="card-cvv">
-                    <span>CVV / CVC</span>
-                    <input id="card-cvv" name="cardCVV2" type="password" inputmode="numeric" autocomplete="cc-csc" maxlength="6" required>
+
+                  <div class="form-grid card-grid">
+                    <input id="card-expiry-month" name="cardExpireDateMonth" type="hidden">
+                    <input id="card-expiry-year" name="cardExpireDateYear" type="hidden">
+                    <label class="field" for="card-expiry">
+                      <span>Son kullanma tarihi</span>
+                      <input id="card-expiry" type="text" inputmode="numeric" autocomplete="cc-exp" maxlength="5" placeholder="AA/YY" required>
+                    </label>
+                    <label class="field" for="card-cvv">
+                      <span>CVV / CVC</span>
+                      <input id="card-cvv" name="cardCVV2" type="password" inputmode="numeric" autocomplete="cc-csc" maxlength="3" pattern="[0-9]{3}" placeholder="•••" required>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="card-form-section">
+                  <legend>İletişim ve fatura bilgileri</legend>
+                  <label class="field" for="card-email">
+                    <span>E-posta</span>
+                    <input id="card-email" name="cardEmail" type="email" autocomplete="email" readonly required>
                   </label>
-                </div>
 
-                <label class="field" for="card-email">
-                  <span>E-posta</span>
-                  <input id="card-email" name="cardEmail" type="email" autocomplete="email" readonly required>
-                </label>
+                  <div class="form-grid phone-grid">
+                    <label class="field" for="card-phone-country">
+                      <span>Ülke kodu</span>
+                      <input id="card-phone-country" name="cardPhoneCountry" type="text" inputmode="numeric" value="90" maxlength="3" readonly required>
+                    </label>
+                    <label class="field" for="card-phone">
+                      <span>Cep telefonu</span>
+                      <input id="card-phone" name="cardPhone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="18" placeholder="5XXXXXXXXX" required>
+                    </label>
+                  </div>
 
-                <div class="form-grid phone-grid">
-                  <label class="field" for="card-phone-country">
-                    <span>Ülke kodu</span>
-                    <input id="card-phone-country" name="cardPhoneCountry" type="text" inputmode="numeric" value="90" maxlength="3" readonly required>
+                  <div class="form-grid billing-grid">
+                    <label class="field" for="billing-city">
+                      <span>Fatura ili</span>
+                      <select id="billing-city" name="billAddrCity" autocomplete="address-level1" required>
+                        <option value="">İl seçin</option>
+                      </select>
+                    </label>
+                    <label class="field" for="billing-postcode">
+                      <span>Posta kodu</span>
+                      <input id="billing-postcode" name="billAddrPostCode" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="34000" required>
+                    </label>
+                  </div>
+
+                  <label class="field" for="billing-address">
+                    <span>Fatura adresi</span>
+                    <input id="billing-address" name="billAddrLine1" type="text" autocomplete="address-line1" maxlength="150" placeholder="Mahalle, cadde, sokak ve bina numarası" required>
                   </label>
-                  <label class="field" for="card-phone">
-                    <span>Cep telefonu</span>
-                    <input id="card-phone" name="cardPhone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="18" placeholder="5XXXXXXXXX" required>
-                  </label>
-                </div>
-
-                <label class="field" for="billing-city">
-                  <span>Fatura ili</span>
-                  <select id="billing-city" name="billAddrCity" autocomplete="address-level1" required>
-                    <option value="">İl seçin</option>
-                  </select>
-                </label>
-
-                <label class="field" for="billing-address">
-                  <span>Fatura adresi</span>
-                  <input id="billing-address" name="billAddrLine1" type="text" autocomplete="address-line1" maxlength="150" required>
-                </label>
-
-                <label class="field" for="billing-postcode">
-                  <span>Posta kodu</span>
-                  <input id="billing-postcode" name="billAddrPostCode" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" required>
-                </label>
+                </fieldset>
 
                 <button type="submit" class="button primary full" id="card-submit">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
