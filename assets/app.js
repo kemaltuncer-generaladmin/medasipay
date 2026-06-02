@@ -822,10 +822,14 @@
       help.className = "callout";
       help.querySelector("strong").textContent = "Ödeme oturumunun süresi dolmuş.";
       help.querySelector("span").textContent = "Lütfen ödemeyi başlattığınız uygulamadan yeni bir bağlantı oluşturun.";
-    } else if (session.status === "approved" || session.status === "entitled") {
+    } else if (session.status === "entitled") {
       help.className = "callout success";
       help.querySelector("strong").textContent = "Ödemeniz onaylandı.";
       help.querySelector("span").textContent = "İlgili hesabınıza hak tanımı işlenmiştir; ek bir işlem yapmanıza gerek yoktur.";
+    } else if (session.status === "approved") {
+      help.className = "callout info";
+      help.querySelector("strong").textContent = "Ödemeniz onaylandı, hak tanımı bekleniyor.";
+      help.querySelector("span").textContent = "Hak tanımı henüz tamamlanmadı. Kısa süre sonra tekrar kontrol edin; devam ederse destek ekibimizle iletişime geçin.";
     } else if (session.status === "rejected") {
       help.className = "callout";
       help.querySelector("strong").textContent = "Ödeme reddedildi.";
@@ -1079,16 +1083,6 @@
     if (year) year.value = digits.slice(2, 4);
   }
 
-  function detectCardBrand(value) {
-    var digits = digitsOnly(value);
-    if (/^9792/.test(digits)) return "TROY";
-    if (/^4/.test(digits)) return "VISA";
-    if (/^(5[1-5]\d{2}|2(?:2(?:2[1-9]|[3-9]\d)|[3-6]\d{2}|7(?:[01]\d|20)))/.test(digits)) {
-      return "Mastercard";
-    }
-    return "";
-  }
-
   function passesLuhnCheck(value) {
     var sum = 0;
     var shouldDouble = false;
@@ -1127,14 +1121,6 @@
   function isAcceptedCardExpiry(cardNumber, month, year) {
     return isFutureCardExpiry(month, year) ||
       isKuveytSandboxCardExpiry(cardNumber, month, year);
-  }
-
-  function updateCardBrand() {
-    var badge = $("#card-brand");
-    if (!badge) return;
-    var brand = detectCardBrand($("#card-number").value);
-    badge.textContent = brand || "TROY / Mastercard / VISA";
-    badge.classList.toggle("recognized", Boolean(brand));
   }
 
   function syncBillingState() {
@@ -1208,7 +1194,6 @@
     }
     if (input.id === "card-number") {
       if (digits.length < 13 || digits.length > 19) return "Kart numarası 13-19 haneli olmalı.";
-      if (!detectCardBrand(digits)) return "Yalnız TROY, Mastercard veya Visa kart kullanabilirsiniz.";
       return passesLuhnCheck(digits) ? "" : "Kart numarasını kontrol edin.";
     }
     if (input.id === "card-expiry") {
@@ -1289,7 +1274,6 @@
     if (cardNumber) {
       cardNumber.addEventListener("input", function () {
         cardNumber.value = formatCardNumber(cardNumber.value);
-        updateCardBrand();
       });
     }
     if (expiry) {
@@ -1348,7 +1332,6 @@
         updateCardFormValidity(false);
       });
     });
-    updateCardBrand();
     updateCardFormValidity(false);
 
     form.addEventListener("submit", function (event) {

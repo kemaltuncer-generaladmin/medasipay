@@ -647,10 +647,6 @@ a {
   white-space: nowrap;
 }
 
-.card-number-input strong.recognized {
-  color: var(--primary);
-}
-
 .field-hint {
   color: var(--muted);
   display: block;

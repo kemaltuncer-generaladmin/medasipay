@@ -106,6 +106,10 @@ Canlı ortamda `APP_URL` mutlaka public ödeme domaini olmalıdır
 saklamaz. Kart üzerindeki ad, telefon ve fatura adresi gibi hassas olmayan
 alanlar sonraki ödemeleri kolaylaştırmak için yalnız kullanıcının tarayıcısında
 hatırlanır.
+TROY kartlar ortak markalı PAN aralıkları kullanabildiği için ödeme ekranı
+kart numarasını yalnız uzunluk ve Luhn kontrolünden geçirir. Kuveyt Türk
+Sanal POS isteğinde opsiyonel `CardType` alanı gönderilmez; kart türünü ve
+destek durumunu banka doğrular.
 
 Kuveyt Türk sandbox testi için `KUVEYT_POS_ENV=test` kullanılmalıdır. Bankanın
 sabit test fixture'ı `5188 9619 3919 2544`, son kullanım `06/25`, CVV `929` ve

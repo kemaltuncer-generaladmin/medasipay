@@ -155,6 +155,10 @@ Alanlar:
 `paymentOptions.cardTestMode=true` yalnız Kuveyt Türk sandbox bağlantısında
 döner. Sandbox ortamında bankanın sabit test kartı üzerindeki geçmiş son
 kullanım tarihi kabul edilir; canlı kartların tarih kontrolü değişmez.
+TROY kartlar ortak markalı PAN aralıkları kullanabildiği için istemci ve ödeme
+servisi TROY kartını yalnız belirli bir kart numarası önekiyle sınırlandırmaz.
+Ödeme servisi opsiyonel `CardType` alanını göndermez; kart türü için nihai
+doğrulamayı Kuveyt Türk Sanal POS yapar.
 
 Banka `OkUrl` dönüşünde `AuthenticationResponse` içinde `ResponseCode=00` ve
 `MD` gönderirse servis `ThreeDModelProvisionGate` ile provizyon alır. Provizyon

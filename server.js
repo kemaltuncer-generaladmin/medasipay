@@ -1113,7 +1113,6 @@ function normalizeCardForm(fields) {
     cardExpireDateMonth: month,
     cardExpireDateYear: year,
     cardCVV2: cvv,
-    cardType: normalizeCardType(fields.cardType, cardNumber),
     phoneCountryCode: countryCode.slice(0, 3),
     phoneSubscriber: subscriber,
     billAddrCity,
@@ -1181,19 +1180,6 @@ function passesLuhnCheck(value) {
     shouldDouble = !shouldDouble;
   }
   return sum % 10 === 0;
-}
-
-function normalizeCardType(value, cardNumber) {
-  const raw = stringValue(value).toLowerCase();
-  if (raw === "troy") return "TROY";
-  if (raw === "mastercard" || raw === "master card") return "MasterCard";
-  if (raw === "visa") return "VISA";
-  if (/^9792/.test(cardNumber)) return "TROY";
-  if (/^4/.test(cardNumber)) return "VISA";
-  if (/^(5[1-5]\d{2}|2(?:2(?:2[1-9]|[3-9]\d)|[3-6]\d{2}|7(?:[01]\d|20)))/.test(cardNumber)) {
-    return "MasterCard";
-  }
-  throw httpError(400, "Desteklenmeyen kart türü.");
 }
 
 function kuveytMerchantOrderId(order) {
@@ -1315,7 +1301,6 @@ function kuveytPaymentXml(config, order, card, okUrl, failUrl, ip) {
 <CardExpireDateMonth>${escapeXml(card.cardExpireDateMonth)}</CardExpireDateMonth>
 <CardCVV2>${escapeXml(card.cardCVV2)}</CardCVV2>
 <CardHolderName>${escapeXml(card.cardHolderName)}</CardHolderName>
-<CardType>${escapeXml(card.cardType)}</CardType>
 <BatchID>0</BatchID>
 <TransactionType>Sale</TransactionType>
 <InstallmentCount>${escapeXml(config.installmentCount)}</InstallmentCount>
