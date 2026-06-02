@@ -29,8 +29,6 @@ const kuveytPosEndpoints = {
     "https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home/ThreeDModelPayGate",
   productionProvisionGate:
     "https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home/ThreeDModelProvisionGate",
-  legacyProductionProvisionGate:
-    "https://boa.kuveytturk.com.tr/sanalposservice/Home/ThreeDModelProvisionGate",
 };
 const kuveytSandboxCardFixture = {
   cardNumber: "5188961939192544",
@@ -853,20 +851,6 @@ async function handleKuveytPosCallback(request, response, successRoute) {
   });
   const xml = decodeAuthenticationResponse(fields.AuthenticationResponse);
   const payload = parseKuveytResponse(xml);
-  const alternativeXml = decodeAuthenticationResponse(
-    fields.AuthenticationResponse,
-    true,
-  );
-  if (alternativeXml !== xml) {
-    const alternativePayload = parseKuveytResponse(alternativeXml);
-    if (alternativePayload.MD && alternativePayload.MD !== payload.MD) {
-      payload.AlternativeMD = alternativePayload.MD;
-      console.info("Kuveyt authentication alternative MD available", {
-        primary: kuveytOpaqueValueStats(payload.MD),
-        alternative: kuveytOpaqueValueStats(payload.AlternativeMD),
-      });
-    }
-  }
   const merchantOrderId = payload.MerchantOrderId;
   const order = merchantOrderId
     ? await findOrderByMerchantOrderId(merchantOrderId)
@@ -963,6 +947,8 @@ async function provisionCardPayment(order, authPayload, config) {
     merchantIdMatchesConfig: authPayload.MerchantId === config.merchantId,
     customerIdMatchesConfig: authPayload.CustomerId === config.customerId,
     userNameMatchesConfig: authPayload.UserName === config.userName,
+    customerId: kuveytOpaqueValueStats(authPayload.CustomerId),
+    userName: kuveytOpaqueValueStats(authPayload.UserName),
     installmentCount: authPayload.InstallmentCount,
     currencyCode: authPayload.CurrencyCode,
     transactionSecurity: authPayload.TransactionSecurity,
@@ -975,46 +961,10 @@ async function provisionCardPayment(order, authPayload, config) {
     authPayload.MerchantOrderId,
     authPayload.Amount,
     authPayload.MD,
+    authPayload,
   );
-  let text = await postKuveytXml(config.provisionGateUrl, xml);
-  let payload = parseKuveytResponse(text);
-  let md = authPayload.MD;
-  if (payload.ResponseCode === "InvalidMetaData" && authPayload.AlternativeMD) {
-    console.warn("Retrying Kuveyt provision with alternative MD decoding", {
-      merchantOrderId: authPayload.MerchantOrderId,
-      md: kuveytOpaqueValueStats(authPayload.AlternativeMD),
-    });
-    md = authPayload.AlternativeMD;
-    text = await postKuveytXml(
-      config.provisionGateUrl,
-      kuveytProvisionXml(
-        config,
-        authPayload.MerchantOrderId,
-        authPayload.Amount,
-        md,
-      ),
-    );
-    payload = parseKuveytResponse(text);
-  }
-  if (
-    payload.ResponseCode === "InvalidMetaData" &&
-    config.mode === "production" &&
-    config.provisionGateUrl === kuveytPosEndpoints.productionProvisionGate
-  ) {
-    console.warn("Retrying Kuveyt provision through legacy production endpoint", {
-      merchantOrderId: authPayload.MerchantOrderId,
-    });
-    text = await postKuveytXml(
-      kuveytPosEndpoints.legacyProductionProvisionGate,
-      kuveytProvisionXml(
-        config,
-        authPayload.MerchantOrderId,
-        authPayload.Amount,
-        md,
-      ),
-    );
-    payload = parseKuveytResponse(text);
-  }
+  const text = await postKuveytXml(config.provisionGateUrl, xml);
+  const payload = parseKuveytResponse(text);
   const hashOk = verifyKuveytResponseHash(payload, config, Boolean(payload.RRN));
   if (payload.ResponseCode && payload.ResponseCode !== "00") {
     console.warn("Kuveyt provision declined", kuveytResponseLogFields(payload));
@@ -1377,22 +1327,26 @@ function kuveytPaymentXml(config, order, card, okUrl, failUrl, ip) {
 </KuveytTurkVPosMessage>`;
 }
 
-function kuveytProvisionXml(config, merchantOrderId, amount, md) {
+function kuveytProvisionXml(config, merchantOrderId, amount, md, authPayload) {
+  const customerId = stringValue(authPayload?.CustomerId) || config.customerId;
+  const userName = stringValue(authPayload?.UserName) || config.userName;
+  const installmentCount =
+    stringValue(authPayload?.InstallmentCount) || config.installmentCount;
   const hashData = kuveytHash(
     config.merchantId +
       merchantOrderId +
       amount +
-      config.userName +
+      userName +
       config.hashedPassword,
   );
   return `<KuveytTurkVPosMessage xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
 <APIVersion>${escapeXml(config.provisionGateApiVersion)}</APIVersion>
 <HashData>${escapeXml(hashData)}</HashData>
 <MerchantId>${escapeXml(config.merchantId)}</MerchantId>
-<CustomerId>${escapeXml(config.customerId)}</CustomerId>
-<UserName>${escapeXml(config.userName)}</UserName>
+<CustomerId>${escapeXml(customerId)}</CustomerId>
+<UserName>${escapeXml(userName)}</UserName>
 <TransactionType>Sale</TransactionType>
-<InstallmentCount>${escapeXml(config.installmentCount)}</InstallmentCount>
+<InstallmentCount>${escapeXml(installmentCount)}</InstallmentCount>
 <Amount>${escapeXml(amount)}</Amount>
 <MerchantOrderId>${escapeXml(merchantOrderId)}</MerchantOrderId>
 <TransactionSecurity>3</TransactionSecurity>
@@ -1437,13 +1391,11 @@ async function postKuveytXml(url, xml) {
   }
 }
 
-function decodeAuthenticationResponse(value, preservePlus) {
+function decodeAuthenticationResponse(value) {
   const raw = stringValue(value);
   if (!raw) throw httpError(400, "Banka dönüş mesajı eksik.");
   try {
-    return decodeURIComponent(
-      raw.includes("<") || preservePlus ? raw : raw.replace(/\+/g, " "),
-    );
+    return decodeURIComponent(raw.includes("<") ? raw : raw.replace(/\+/g, " "));
   } catch {
     return raw;
   }
