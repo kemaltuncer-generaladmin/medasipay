@@ -29,6 +29,8 @@ const kuveytPosEndpoints = {
     "https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home/ThreeDModelPayGate",
   productionProvisionGate:
     "https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home/ThreeDModelProvisionGate",
+  legacyProductionProvisionGate:
+    "https://boa.kuveytturk.com.tr/sanalposservice/Home/ThreeDModelProvisionGate",
 };
 const kuveytSandboxCardFixture = {
   cardNumber: "5188961939192544",
@@ -958,6 +960,14 @@ async function provisionCardPayment(order, authPayload, config) {
   console.info("Kuveyt authentication metadata accepted", {
     merchantOrderId: authPayload.MerchantOrderId,
     amount: authPayload.Amount,
+    merchantIdMatchesConfig: authPayload.MerchantId === config.merchantId,
+    customerIdMatchesConfig: authPayload.CustomerId === config.customerId,
+    userNameMatchesConfig: authPayload.UserName === config.userName,
+    installmentCount: authPayload.InstallmentCount,
+    currencyCode: authPayload.CurrencyCode,
+    transactionSecurity: authPayload.TransactionSecurity,
+    referenceId: authPayload.ReferenceId,
+    businessKey: authPayload.BusinessKey,
     md: kuveytOpaqueValueStats(authPayload.MD),
   });
   const xml = kuveytProvisionXml(
@@ -968,18 +978,39 @@ async function provisionCardPayment(order, authPayload, config) {
   );
   let text = await postKuveytXml(config.provisionGateUrl, xml);
   let payload = parseKuveytResponse(text);
+  let md = authPayload.MD;
   if (payload.ResponseCode === "InvalidMetaData" && authPayload.AlternativeMD) {
     console.warn("Retrying Kuveyt provision with alternative MD decoding", {
       merchantOrderId: authPayload.MerchantOrderId,
       md: kuveytOpaqueValueStats(authPayload.AlternativeMD),
     });
+    md = authPayload.AlternativeMD;
     text = await postKuveytXml(
       config.provisionGateUrl,
       kuveytProvisionXml(
         config,
         authPayload.MerchantOrderId,
         authPayload.Amount,
-        authPayload.AlternativeMD,
+        md,
+      ),
+    );
+    payload = parseKuveytResponse(text);
+  }
+  if (
+    payload.ResponseCode === "InvalidMetaData" &&
+    config.mode === "production" &&
+    config.provisionGateUrl === kuveytPosEndpoints.productionProvisionGate
+  ) {
+    console.warn("Retrying Kuveyt provision through legacy production endpoint", {
+      merchantOrderId: authPayload.MerchantOrderId,
+    });
+    text = await postKuveytXml(
+      kuveytPosEndpoints.legacyProductionProvisionGate,
+      kuveytProvisionXml(
+        config,
+        authPayload.MerchantOrderId,
+        authPayload.Amount,
+        md,
       ),
     );
     payload = parseKuveytResponse(text);
@@ -1424,6 +1455,12 @@ function parseKuveytResponse(xml) {
   return {
     OrderId: xmlTagValue(text, "OrderId"),
     MerchantOrderId: xmlTagValue(text, "MerchantOrderId"),
+    MerchantId: xmlTagValue(text, "MerchantId"),
+    CustomerId: xmlTagValue(text, "CustomerId"),
+    UserName: xmlTagValue(text, "UserName"),
+    InstallmentCount: xmlTagValue(text, "InstallmentCount"),
+    CurrencyCode: xmlTagValue(text, "CurrencyCode"),
+    TransactionSecurity: xmlTagValue(text, "TransactionSecurity"),
     Amount: xmlTagValue(text, "Amount"),
     ProvisionNumber: xmlTagValue(text, "ProvisionNumber"),
     RRN: xmlTagValue(text, "RRN"),
