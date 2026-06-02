@@ -923,10 +923,30 @@ async function handleKuveytPosCallback(request, response, successRoute) {
 async function provisionCardPayment(order, authPayload, config) {
   const freshOrder = await findOrder(order.id);
   if (!freshOrder) throw httpError(404, "Sipariş bulunamadı.");
+  const storedMerchantOrderId =
+    freshOrder.cardPayment?.merchantOrderId || kuveytMerchantOrderId(freshOrder);
+  const storedAmount = freshOrder.cardPayment?.amount || kuveytAmount(freshOrder);
+  if (
+    authPayload.MerchantOrderId !== storedMerchantOrderId ||
+    !kuveytAmountsEqual(authPayload.Amount, storedAmount)
+  ) {
+    console.warn("Kuveyt authentication metadata mismatch", {
+      merchantOrderId: authPayload.MerchantOrderId,
+      storedMerchantOrderId,
+      amount: authPayload.Amount,
+      storedAmount,
+    });
+    throw httpError(400, "Banka doğrulama bilgileri siparişle eşleşmedi.");
+  }
+  console.info("Kuveyt authentication metadata accepted", {
+    merchantOrderId: authPayload.MerchantOrderId,
+    amount: authPayload.Amount,
+    mdLength: authPayload.MD.length,
+  });
   const xml = kuveytProvisionXml(
     config,
-    freshOrder.cardPayment?.merchantOrderId || kuveytMerchantOrderId(freshOrder),
-    freshOrder.cardPayment?.amount || kuveytAmount(freshOrder),
+    authPayload.MerchantOrderId,
+    authPayload.Amount,
     authPayload.MD,
   );
   const text = await postKuveytXml(config.provisionGateUrl, xml);
@@ -1370,6 +1390,7 @@ function parseKuveytResponse(xml) {
   return {
     OrderId: xmlTagValue(text, "OrderId"),
     MerchantOrderId: xmlTagValue(text, "MerchantOrderId"),
+    Amount: xmlTagValue(text, "Amount"),
     ProvisionNumber: xmlTagValue(text, "ProvisionNumber"),
     RRN: xmlTagValue(text, "RRN"),
     Stan: xmlTagValue(text, "Stan"),
@@ -1386,6 +1407,16 @@ function parseKuveytResponse(xml) {
 function xmlTagValue(xml, tag) {
   const match = String(xml).match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i"));
   return match ? decodeXmlEntities(match[1].trim()) : "";
+}
+
+function kuveytAmountsEqual(left, right) {
+  const a = stringValue(left);
+  const b = stringValue(right);
+  if (!a || !b) return false;
+  if (!/^\d+(?:[.,]\d+)?$/.test(a) || !/^\d+(?:[.,]\d+)?$/.test(b)) {
+    return a === b;
+  }
+  return Number(a.replace(",", ".")) === Number(b.replace(",", "."));
 }
 
 function verifyKuveytResponseHash(payload, config, includeRrn) {
