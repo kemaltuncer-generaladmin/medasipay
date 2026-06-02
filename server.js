@@ -846,6 +846,9 @@ async function initiateCardPayment(orderId, fields, request) {
 
 async function handleKuveytPosCallback(request, response, successRoute) {
   const fields = await readKuveytCallbackForm(request, maxKuveytCallbackBytes);
+  console.info("Kuveyt authentication callback received", {
+    authenticationResponse: kuveytOpaqueValueStats(fields.AuthenticationResponse),
+  });
   const xml = decodeAuthenticationResponse(fields.AuthenticationResponse);
   const payload = parseKuveytResponse(xml);
   const merchantOrderId = payload.MerchantOrderId;
@@ -941,7 +944,7 @@ async function provisionCardPayment(order, authPayload, config) {
   console.info("Kuveyt authentication metadata accepted", {
     merchantOrderId: authPayload.MerchantOrderId,
     amount: authPayload.Amount,
-    mdLength: authPayload.MD.length,
+    md: kuveytOpaqueValueStats(authPayload.MD),
   });
   const xml = kuveytProvisionXml(
     config,
@@ -1378,7 +1381,7 @@ function decodeAuthenticationResponse(value) {
   const raw = stringValue(value);
   if (!raw) throw httpError(400, "Banka dönüş mesajı eksik.");
   try {
-    return raw.includes("<") ? raw : decodeURIComponent(raw);
+    return decodeURIComponent(raw);
   } catch {
     return raw;
   }
@@ -1565,6 +1568,18 @@ function kuveytResponseLogFields(payload) {
     responseMessage: payload.ResponseMessage || "",
     rrn: payload.RRN || "",
     stan: payload.Stan || "",
+  };
+}
+
+function kuveytOpaqueValueStats(value) {
+  const text = String(value || "");
+  return {
+    length: text.length,
+    plus: (text.match(/\+/g) || []).length,
+    spaces: (text.match(/ /g) || []).length,
+    percentEscapes: (text.match(/%[0-9a-f]{2}/gi) || []).length,
+    slashes: (text.match(/\//g) || []).length,
+    equals: (text.match(/=/g) || []).length,
   };
 }
 
