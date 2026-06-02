@@ -851,6 +851,20 @@ async function handleKuveytPosCallback(request, response, successRoute) {
   });
   const xml = decodeAuthenticationResponse(fields.AuthenticationResponse);
   const payload = parseKuveytResponse(xml);
+  const alternativeXml = decodeAuthenticationResponse(
+    fields.AuthenticationResponse,
+    true,
+  );
+  if (alternativeXml !== xml) {
+    const alternativePayload = parseKuveytResponse(alternativeXml);
+    if (alternativePayload.MD && alternativePayload.MD !== payload.MD) {
+      payload.AlternativeMD = alternativePayload.MD;
+      console.info("Kuveyt authentication alternative MD available", {
+        primary: kuveytOpaqueValueStats(payload.MD),
+        alternative: kuveytOpaqueValueStats(payload.AlternativeMD),
+      });
+    }
+  }
   const merchantOrderId = payload.MerchantOrderId;
   const order = merchantOrderId
     ? await findOrderByMerchantOrderId(merchantOrderId)
@@ -952,8 +966,24 @@ async function provisionCardPayment(order, authPayload, config) {
     authPayload.Amount,
     authPayload.MD,
   );
-  const text = await postKuveytXml(config.provisionGateUrl, xml);
-  const payload = parseKuveytResponse(text);
+  let text = await postKuveytXml(config.provisionGateUrl, xml);
+  let payload = parseKuveytResponse(text);
+  if (payload.ResponseCode === "InvalidMetaData" && authPayload.AlternativeMD) {
+    console.warn("Retrying Kuveyt provision with alternative MD decoding", {
+      merchantOrderId: authPayload.MerchantOrderId,
+      md: kuveytOpaqueValueStats(authPayload.AlternativeMD),
+    });
+    text = await postKuveytXml(
+      config.provisionGateUrl,
+      kuveytProvisionXml(
+        config,
+        authPayload.MerchantOrderId,
+        authPayload.Amount,
+        authPayload.AlternativeMD,
+      ),
+    );
+    payload = parseKuveytResponse(text);
+  }
   const hashOk = verifyKuveytResponseHash(payload, config, Boolean(payload.RRN));
   if (payload.ResponseCode && payload.ResponseCode !== "00") {
     console.warn("Kuveyt provision declined", kuveytResponseLogFields(payload));
@@ -1377,11 +1407,13 @@ async function postKuveytXml(url, xml) {
   }
 }
 
-function decodeAuthenticationResponse(value) {
+function decodeAuthenticationResponse(value, preservePlus) {
   const raw = stringValue(value);
   if (!raw) throw httpError(400, "Banka dönüş mesajı eksik.");
   try {
-    return decodeURIComponent(raw.includes("<") ? raw : raw.replace(/\+/g, " "));
+    return decodeURIComponent(
+      raw.includes("<") || preservePlus ? raw : raw.replace(/\+/g, " "),
+    );
   } catch {
     return raw;
   }
