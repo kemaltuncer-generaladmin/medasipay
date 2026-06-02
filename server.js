@@ -1381,7 +1381,7 @@ function decodeAuthenticationResponse(value) {
   const raw = stringValue(value);
   if (!raw) throw httpError(400, "Banka dönüş mesajı eksik.");
   try {
-    return decodeURIComponent(raw);
+    return decodeURIComponent(raw.includes("<") ? raw : raw.replace(/\+/g, " "));
   } catch {
     return raw;
   }
