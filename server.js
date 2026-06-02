@@ -1362,7 +1362,6 @@ function kuveytProvisionXml(config, merchantOrderId, amount, md) {
 <UserName>${escapeXml(config.userName)}</UserName>
 <TransactionType>Sale</TransactionType>
 <InstallmentCount>${escapeXml(config.installmentCount)}</InstallmentCount>
-<CurrencyCode>${escapeXml(config.currencyCode)}</CurrencyCode>
 <Amount>${escapeXml(amount)}</Amount>
 <MerchantOrderId>${escapeXml(merchantOrderId)}</MerchantOrderId>
 <TransactionSecurity>3</TransactionSecurity>
