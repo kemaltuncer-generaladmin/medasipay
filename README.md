@@ -99,6 +99,9 @@ fatura/telefon alanlarını alır, Kuveyt Türk `ThreeDModelPayGate` yanıtını
 tarayıcıya iletir. Banka `OkUrl` dönüşünde MD değerini gönderdiğinde servis
 `ThreeDModelProvisionGate` ile provizyon alır; `ResponseCode=00` dönerse sipariş
 kart kanalıyla onaylanır ve entitlement webhook otomatik denenir.
+Canlı ortamda `APP_URL` mutlaka public ödeme domaini olmalıdır
+(`https://odeme.medasi.com.tr`); bu değer `localhost` kalırsa banka 3D dönüşünü
+ödeme servisine ulaştıramaz.
 Ödeme formu kart numarasını, son kullanma tarihini veya CVV / CVC değerini
 saklamaz. Kart üzerindeki ad, telefon ve fatura adresi gibi hassas olmayan
 alanlar sonraki ödemeleri kolaylaştırmak için yalnız kullanıcının tarayıcısında

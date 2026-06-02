@@ -5,9 +5,8 @@ const http = require("node:http");
 const path = require("node:path");
 
 const port = Number(process.env.PORT || 3000);
-const appUrl = trimTrailingSlash(
-  process.env.APP_URL || `http://localhost:${port}`,
-);
+const configuredAppUrl = String(process.env.APP_URL || "").trim();
+const appUrl = trimTrailingSlash(configuredAppUrl || `http://localhost:${port}`);
 const dataDir = process.env.DATA_DIR || path.join(__dirname, "data");
 const receiptDir = path.join(dataDir, "receipts");
 const ordersFile = path.join(dataDir, "orders.json");
@@ -57,6 +56,14 @@ const server = http.createServer(async (request, response) => {
 server.listen(port, async () => {
   await ensureDataDirs();
   console.log(`MedAsi Pay listening on ${port}`);
+  if (
+    isLocalBaseUrl(appUrl) &&
+    (process.env.APP_ENV === "production" || kuveytPosMode() === "production")
+  ) {
+    console.warn(
+      "APP_URL is local while Kuveyt POS is production. Callbacks will use the request host when possible.",
+    );
+  }
 });
 
 async function route(request, response) {
@@ -744,6 +751,10 @@ function kuveytPosConfig() {
     hashedPassword: sha1Base64(password, "utf8"),
     currencyCode: stringValue(process.env.KUVEYT_POS_CURRENCY_CODE) || "0949",
     installmentCount: stringValue(process.env.KUVEYT_POS_INSTALLMENT_COUNT) || "0",
+    payGateApiVersion: stringValue(process.env.KUVEYT_POS_PAY_GATE_API_VERSION) ||
+      "TDV2.0.0",
+    provisionGateApiVersion: stringValue(process.env.KUVEYT_POS_PROVISION_GATE_API_VERSION) ||
+      "1.0.0",
     payGateUrl: stringValue(process.env.KUVEYT_POS_PAY_GATE_URL) ||
       (mode === "production"
         ? kuveytPosEndpoints.productionPayGate
@@ -794,8 +805,8 @@ async function initiateCardPayment(orderId, fields, request) {
     };
   });
 
-  const okUrl = kuveytCallbackUrl("success");
-  const failUrl = kuveytCallbackUrl("fail");
+  const okUrl = kuveytCallbackUrl("success", request);
+  const failUrl = kuveytCallbackUrl("fail", request);
   const cardForBank = {
     ...card,
     email: normalizeCardCustomerEmail((orderForBank || order).customerEmail),
@@ -921,6 +932,9 @@ async function provisionCardPayment(order, authPayload, config) {
   const text = await postKuveytXml(config.provisionGateUrl, xml);
   const payload = parseKuveytResponse(text);
   const hashOk = verifyKuveytResponseHash(payload, config, Boolean(payload.RRN));
+  if (payload.ResponseCode && payload.ResponseCode !== "00") {
+    console.warn("Kuveyt provision declined", kuveytResponseLogFields(payload));
+  }
   if (payload.ResponseCode === "00" && !hashOk) {
     console.warn("Kuveyt provision approved but response hash did not verify", {
       merchantOrderId: payload.MerchantOrderId,
@@ -1165,8 +1179,63 @@ function kuveytAmount(order) {
   return String(amount);
 }
 
-function kuveytCallbackUrl(result) {
-  return `${appUrl}/api/kuveytpos/3d-callback/${result}`;
+function kuveytCallbackUrl(result, request) {
+  return `${publicAppUrl(request)}/api/kuveytpos/3d-callback/${result}`;
+}
+
+function publicAppUrl(request) {
+  if (!isLocalBaseUrl(appUrl)) return appUrl;
+  return publicRequestOrigin(request) || appUrl;
+}
+
+function publicRequestOrigin(request) {
+  if (!request) return "";
+  const host = firstHeaderValue(request.headers["x-forwarded-host"]) ||
+    firstHeaderValue(request.headers.host);
+  if (!host) return "";
+  const protocol = requestProtocol(request);
+  try {
+    const url = new URL(`${protocol}://${host}`);
+    if (isLocalHostname(url.hostname)) return "";
+    return trimTrailingSlash(url.origin);
+  } catch {
+    return "";
+  }
+}
+
+function requestProtocol(request) {
+  const forwardedProto = firstHeaderValue(request.headers["x-forwarded-proto"]);
+  if (forwardedProto === "http" || forwardedProto === "https") {
+    return forwardedProto;
+  }
+  const forwardedSsl = firstHeaderValue(request.headers["x-forwarded-ssl"]);
+  if (forwardedSsl.toLowerCase() === "on") return "https";
+  if (process.env.APP_ENV === "production" || kuveytPosMode() === "production") {
+    return "https";
+  }
+  return request.socket?.encrypted ? "https" : "http";
+}
+
+function firstHeaderValue(value) {
+  if (Array.isArray(value)) return firstHeaderValue(value[0]);
+  return String(value || "").split(",")[0].trim();
+}
+
+function isLocalBaseUrl(value) {
+  try {
+    return isLocalHostname(new URL(value).hostname);
+  } catch {
+    return true;
+  }
+}
+
+function isLocalHostname(value) {
+  const hostname = String(value || "").toLowerCase();
+  return hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]" ||
+    hostname.endsWith(".localhost");
 }
 
 function kuveytPaymentXml(config, order, card, okUrl, failUrl, ip) {
@@ -1184,7 +1253,7 @@ function kuveytPaymentXml(config, order, card, okUrl, failUrl, ip) {
   const clientIpValue = normalizeClientIp(ip);
 
   return `<KuveytTurkVPosMessage xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-<APIVersion>TDV2.0.0</APIVersion>
+<APIVersion>${escapeXml(config.payGateApiVersion)}</APIVersion>
 <OkUrl>${escapeXml(okUrl)}</OkUrl>
 <FailUrl>${escapeXml(failUrl)}</FailUrl>
 <HashData>${escapeXml(hashData)}</HashData>
@@ -1233,7 +1302,7 @@ function kuveytProvisionXml(config, merchantOrderId, amount, md) {
       config.hashedPassword,
   );
   return `<KuveytTurkVPosMessage xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-<APIVersion>TDV2.0.0</APIVersion>
+<APIVersion>${escapeXml(config.provisionGateApiVersion)}</APIVersion>
 <HashData>${escapeXml(hashData)}</HashData>
 <MerchantId>${escapeXml(config.merchantId)}</MerchantId>
 <CustomerId>${escapeXml(config.customerId)}</CustomerId>
@@ -1269,6 +1338,11 @@ async function postKuveytXml(url, xml) {
     });
     const text = await response.text();
     if (!response.ok) {
+      console.error("Kuveyt POS HTTP error", {
+        url,
+        statusCode: response.status,
+        response: text.slice(0, 500),
+      });
       throw httpError(502, "Kuveyt Türk sanal POS servisi isteği reddetti.");
     }
     return text;
@@ -1450,6 +1524,17 @@ function userCardFailureMessage(bankMessage, fallback) {
   }
 
   return raw.length > 140 ? fallback : raw;
+}
+
+function kuveytResponseLogFields(payload) {
+  return {
+    merchantOrderId: payload.MerchantOrderId || "",
+    orderId: payload.OrderId || "",
+    responseCode: payload.ResponseCode || "",
+    responseMessage: payload.ResponseMessage || "",
+    rrn: payload.RRN || "",
+    stan: payload.Stan || "",
+  };
 }
 
 function renderCardResultPage(title, message) {
