@@ -754,7 +754,7 @@ function kuveytPosConfig() {
     payGateApiVersion: stringValue(process.env.KUVEYT_POS_PAY_GATE_API_VERSION) ||
       "TDV2.0.0",
     provisionGateApiVersion: stringValue(process.env.KUVEYT_POS_PROVISION_GATE_API_VERSION) ||
-      "1.0.0",
+      "TDV2.0.0",
     payGateUrl: stringValue(process.env.KUVEYT_POS_PAY_GATE_URL) ||
       (mode === "production"
         ? kuveytPosEndpoints.productionPayGate
